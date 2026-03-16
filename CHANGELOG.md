@@ -1,3 +1,10 @@
+## [1.30.7](https://github.com/EchonLabs/kanvaro.com/compare/v1.30.6...v1.30.7) (2026-03-16)
+
+
+### Bug Fixes
+
+* add chnges ([a0311d9](https://github.com/EchonLabs/kanvaro.com/commit/a0311d9d38da60f95fbcca9a906a016eedae3cb1))
+
 ## [1.30.6](https://github.com/EchonLabs/kanvaro.com/compare/v1.30.5...v1.30.6) (2026-03-16)
 
 
