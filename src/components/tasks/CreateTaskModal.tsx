@@ -649,7 +649,7 @@ export default function CreateTaskModal({
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        <CardContent className="flex-1 overflow-y-auto">
           <form onSubmit={handleSubmit} className="space-y-6" autoComplete="on" id="create-task-form">
             {!projectId && (
               <div>
@@ -734,7 +734,7 @@ export default function CreateTaskModal({
                 <div className="mt-1">
                   <RichTextEditor
                     value={formData.description}
-                    onChange={(value) => setFormData({...formData, description: value})}
+                    onChange={(value) => setFormData(prev => ({...prev, description: value}))}
                     placeholder="Enter task description with rich formatting..."
                     maxLength={10000}
                     showCharCount={true}
@@ -1031,6 +1031,30 @@ export default function CreateTaskModal({
                         </div>
                       </SelectContent>
                     </Select>
+                    {hasProjectSelected && !loadingProjectMembers && projectMembers.filter(m => m.isActive !== false).length > 0 && (
+                      <div className="flex justify-end">
+                        {assignedTo.length < projectMembers.filter(m => m.isActive !== false).length ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const allIds = projectMembers.filter(m => m.isActive !== false).map(m => m._id)
+                              setAssignedTo(allIds)
+                            }}
+                            className="text-xs text-primary hover:text-primary/80 font-medium"
+                          >
+                            Select All
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setAssignedTo([])}
+                            className="text-xs text-primary hover:text-primary/80 font-medium"
+                          >
+                            Deselect All
+                          </button>
+                        )}
+                      </div>
+                    )}
                     {assignedTo.length > 0 && (
                       <div className="space-y-2">
                         <div className="flex flex-wrap gap-2">
