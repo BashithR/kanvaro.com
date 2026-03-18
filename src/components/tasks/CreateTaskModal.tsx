@@ -649,7 +649,7 @@ export default function CreateTaskModal({
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        <CardContent className="flex-1 overflow-y-auto">
           <form onSubmit={handleSubmit} className="space-y-6" autoComplete="on" id="create-task-form">
             {!projectId && (
               <div>
