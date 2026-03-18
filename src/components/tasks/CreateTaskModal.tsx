@@ -1031,6 +1031,30 @@ export default function CreateTaskModal({
                         </div>
                       </SelectContent>
                     </Select>
+                    {hasProjectSelected && !loadingProjectMembers && projectMembers.filter(m => m.isActive !== false).length > 0 && (
+                      <div className="flex justify-end">
+                        {assignedTo.length < projectMembers.filter(m => m.isActive !== false).length ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const allIds = projectMembers.filter(m => m.isActive !== false).map(m => m._id)
+                              setAssignedTo(allIds)
+                            }}
+                            className="text-xs text-primary hover:text-primary/80 font-medium"
+                          >
+                            Select All
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setAssignedTo([])}
+                            className="text-xs text-primary hover:text-primary/80 font-medium"
+                          >
+                            Deselect All
+                          </button>
+                        )}
+                      </div>
+                    )}
                     {assignedTo.length > 0 && (
                       <div className="space-y-2">
                         <div className="flex flex-wrap gap-2">
