@@ -625,7 +625,7 @@ export default function EditTaskModal({ isOpen, onClose, task, onTaskUpdated }: 
                 <div className="mt-1">
                   <RichTextEditor
                     value={formData.description}
-                    onChange={(value) => setFormData({...formData, description: value})}
+                    onChange={(value) => setFormData(prev => ({...prev, description: value}))}
                     placeholder="Enter task description with rich formatting..."
                     disabled={loading}
                     maxLength={10000}
@@ -896,6 +896,36 @@ export default function EditTaskModal({ isOpen, onClose, task, onTaskUpdated }: 
                       </div>
                     </SelectContent>
                   </Select>
+                  {!loadingUsers && users.length > 0 && (
+                    <div className="flex justify-end">
+                      {assignedTo.length < users.length ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const allAssignees = users.map(u => ({
+                              _id: u._id,
+                              firstName: u.firstName,
+                              lastName: u.lastName,
+                              email: u.email,
+                              hourlyRate: assigneeHourlyRates[u._id] || ''
+                            }))
+                            setAssignedTo(allAssignees)
+                          }}
+                          className="text-xs text-primary hover:text-primary/80 font-medium"
+                        >
+                          Select All
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setAssignedTo([])}
+                          className="text-xs text-primary hover:text-primary/80 font-medium"
+                        >
+                          Deselect All
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {assignedTo.length > 0 && (
                     <div className="space-y-2">
                       <div className="flex flex-wrap gap-2">
