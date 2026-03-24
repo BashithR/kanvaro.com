@@ -252,8 +252,8 @@ export default function TasksClient({
     )
 
     const canDeleteTask = useCallback(
-        (task: Task) => hasPermission(Permission.TASK_DELETE_ALL) || isCreator(task),
-        [hasPermission, isCreator]
+        (task: Task) => hasPermission(Permission.TASK_DELETE_ALL),
+        [hasPermission]
     )
 
     // Fetch current user for creator checks
@@ -1416,19 +1416,21 @@ export default function TasksClient({
                                                                                         <Edit className="h-4 w-4 mr-2" />
                                                                                         Edit Task
                                                                                     </DropdownMenuItem>
-                                                                                    <DropdownMenuSeparator />
-                                                                                    <DropdownMenuItem
-                                                                                        disabled={!canDeleteTask(task)}
-                                                                                        onClick={(e) => {
-                                                                                            e.stopPropagation()
-                                                                                            if (!canDeleteTask(task)) return
-                                                                                            handleDeleteClick(task)
-                                                                                        }}
-                                                                                        className="text-destructive focus:text-destructive"
-                                                                                    >
-                                                                                        <Trash2 className="h-4 w-4 mr-2" />
-                                                                                        Delete Task
-                                                                                    </DropdownMenuItem>
+                                                                                    {canDeleteTask(task) && (
+                                                                                        <>
+                                                                                            <DropdownMenuSeparator />
+                                                                                            <DropdownMenuItem
+                                                                                                onClick={(e) => {
+                                                                                                    e.stopPropagation()
+                                                                                                    handleDeleteClick(task)
+                                                                                                }}
+                                                                                                className="text-destructive focus:text-destructive"
+                                                                                            >
+                                                                                                <Trash2 className="h-4 w-4 mr-2" />
+                                                                                                Delete Task
+                                                                                            </DropdownMenuItem>
+                                                                                        </>
+                                                                                    )}
                                                                                 </DropdownMenuContent>
                                                                             </DropdownMenu>
                                                                         </div>
