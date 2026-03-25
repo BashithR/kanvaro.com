@@ -155,7 +155,7 @@ export default function TasksClient({
     const searchParams = useSearchParams()
     const { hasPermission } = usePermissions()
     const { formatDate } = useDateTime()
-    const canViewAllTasks = hasPermission(Permission.PROJECT_VIEW_ALL)
+    const canViewAllTasks = hasPermission(Permission.PROJECT_VIEW_ALL) || hasPermission(Permission.TASK_VIEW_ALL)
     const canCreateTask = hasPermission(Permission.TASK_CREATE)
 
     const [tasks, setTasks] = useState<Task[]>(initialTasks)

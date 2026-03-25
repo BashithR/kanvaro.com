@@ -737,7 +737,7 @@ export default function CreateTaskModal({
                   />
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Maximum 10,000 characters.
+                  Maximum 10,000 characters. Click images to resize and delete.
                 </p>
               </div>
 
