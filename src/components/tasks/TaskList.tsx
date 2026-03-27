@@ -86,6 +86,8 @@ export default function TaskList({ projectId, onCreateTask }: TaskListProps) {
   const canManageProject = hasPermission(Permission.PROJECT_UPDATE, projectId)
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
+  const [isFetching, setIsFetching] = useState(false)
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -166,14 +168,21 @@ export default function TaskList({ projectId, onCreateTask }: TaskListProps) {
 
   // Maintain focus on search input when results update
   useEffect(() => {
-    if (!loading && searchQuery && document.activeElement !== searchInputRef.current) {
+    if (!loading && !isFetching && searchQuery && document.activeElement !== searchInputRef.current) {
       searchInputRef.current?.focus()
     }
-  }, [loading, searchQuery])
+  }, [isFetching, searchQuery, loading])
 
   const fetchTasks = async () => {
     try {
-      setLoading(true)
+      // Only show full loading on initial load
+      if (isInitialLoad) {
+        setLoading(true)
+      } else {
+        // For subsequent searches/filters, just indicate fetching without full UI reset
+        setIsFetching(true)
+      }
+      
       // Handle "all" case by not passing project parameter
       const params = new URLSearchParams()
       params.set('page', currentPage.toString())
@@ -195,7 +204,12 @@ export default function TaskList({ projectId, onCreateTask }: TaskListProps) {
     } catch (err) {
       notifyError({ title: 'Error', message: 'Failed to fetch tasks' })
     } finally {
-      setLoading(false)
+      if (isInitialLoad) {
+        setLoading(false)
+        setIsInitialLoad(false)
+      } else {
+        setIsFetching(false)
+      }
     }
   }
 

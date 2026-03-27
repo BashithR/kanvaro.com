@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Clock, Play, Pause, Square, TrendingUp } from 'lucide-react'
+import { Clock, Play, Pause, Square, TrendingUp, AlertTriangle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog'
 import { Timer } from '@/components/time-tracking/Timer'
 import { useOrganization } from '@/hooks/useOrganization'
 import { useDateTime } from '@/components/providers/DateTimeProvider'
@@ -55,6 +56,7 @@ export function TimeTrackingWidget({ userId, organizationId, timeStats: propTime
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [displayTime, setDisplayTime] = useState('00:00:00')
+  const [showStopConfirm, setShowStopConfirm] = useState(false)
   // Local ticking baseline when running
   const baseMinutesRef = useRef<number>(0)
   const tickStartMsRef = useRef<number | null>(null)
@@ -196,7 +198,7 @@ export function TimeTrackingWidget({ userId, organizationId, timeStats: propTime
     const hours = Math.floor(totalSeconds / 3600)
     const mins = Math.floor((totalSeconds % 3600) / 60)
     const secs = totalSeconds % 60
-    
+
     if (hours > 0) {
       return `${hours}h ${mins}m ${secs}s`
     } else if (mins > 0) {
@@ -310,8 +312,8 @@ export function TimeTrackingWidget({ userId, organizationId, timeStats: propTime
                 </div>
               )}
               <div className="flex flex-wrap items-center gap-2 pt-1">
-                <Badge 
-                  variant={activeTimer.isPaused ? 'secondary' : 'default'} 
+                <Badge
+                  variant={activeTimer.isPaused ? 'secondary' : 'default'}
                   className={`text-xs flex-shrink-0 ${activeTimer.isPaused ? 'hover:!bg-secondary dark:hover:!bg-secondary' : 'hover:!bg-primary dark:hover:!bg-primary'}`}
                 >
                   {activeTimer.isPaused ? 'Paused' : 'Running'}
@@ -346,7 +348,7 @@ export function TimeTrackingWidget({ userId, organizationId, timeStats: propTime
                 size="sm"
                 variant="destructive"
                 disabled={isLoading}
-                onClick={() => updateTimerAction('stop')}
+                onClick={() => setShowStopConfirm(true)}
                 className="w-full text-xs sm:text-sm whitespace-nowrap"
               >
                 <Square className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
@@ -372,6 +374,42 @@ export function TimeTrackingWidget({ userId, organizationId, timeStats: propTime
           </CardContent>
         </Card>
       )}
+
+      {/* Stop Timer Confirmation Dialog */}
+      <Dialog open={showStopConfirm} onOpenChange={setShowStopConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Stop Timer
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to stop the active timer?
+              {activeTimer && (
+                <span className="block mt-2 text-foreground font-medium">
+                  {activeTimer.project?.name || 'Unknown project'}
+                  {activeTimer.task && ` • ${activeTimer.task.title}`}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowStopConfirm(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setShowStopConfirm(false)
+                updateTimerAction('stop')
+              }}
+            >
+              <Square className="h-4 w-4 mr-2" />
+              Stop Timer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Time Tracking Widget - Always Visible */}
       <Card className="overflow-x-hidden">
