@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useRef, useCallback, useState } from 'react'
+import React, { useRef, useCallback, useState, useEffect } from 'react'
 import { Button } from '@/components/ui/Button'
 import {
   Bold,
@@ -57,6 +57,33 @@ export function RichTextEditor({
   const [isUploadingImage, setIsUploadingImage] = useState(false)
   const [selectedImage, setSelectedImage] = useState<HTMLImageElement | null>(null)
   const [toolbarPos, setToolbarPos] = useState({ top: 0, left: 0, visible: false })
+  const imageToolbarRef = useRef<HTMLDivElement>(null)
+
+  // Dismiss image toolbar when clicking outside
+  const dismissImageToolbar = useCallback(() => {
+    if (selectedImage) {
+      selectedImage.style.border = 'none'
+      selectedImage.style.outline = 'none'
+    }
+    setSelectedImage(null)
+    setToolbarPos(prev => ({ ...prev, visible: false }))
+  }, [selectedImage])
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!toolbarPos.visible) return
+      const target = e.target as HTMLElement
+      // If clicking on the toolbar itself, do nothing
+      if (imageToolbarRef.current?.contains(target)) return
+      // If clicking on the currently selected image, do nothing
+      if (selectedImage && target === selectedImage) return
+      // Otherwise dismiss
+      dismissImageToolbar()
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [toolbarPos.visible, selectedImage, dismissImageToolbar])
 
   const saveSelection = useCallback(() => {
     const selection = window.getSelection()
@@ -169,7 +196,7 @@ export function RichTextEditor({
       img.style.border = '2px solid rgb(59, 130, 246)'
       img.style.outline = '2px solid rgb(191, 219, 254)'
       img.style.outlineOffset = '2px'
-      
+
       // Position toolbar below image
       const rect = img.getBoundingClientRect()
       const editorRect = editorRef.current?.getBoundingClientRect()
@@ -180,7 +207,7 @@ export function RichTextEditor({
           visible: true
         })
       }
-      
+
       onImageClick?.(img)
       e.preventDefault()
       e.stopPropagation()
@@ -770,6 +797,7 @@ export function RichTextEditor({
       {/* Image Toolbar - Below Image */}
       {toolbarPos.visible && selectedImage && (
         <div
+          ref={imageToolbarRef}
           className="absolute bg-white border border-gray-300 rounded shadow-lg flex items-center justify-center gap-1 p-2 z-50"
           style={{
             top: `${toolbarPos.top}px`,
@@ -905,8 +933,8 @@ export function RichTextEditor({
         onPaste={handlePaste}
         className={cn(
 
-          'rich-text-editor min-h-[120px] max-h-[400px] p-3 focus:outline-none prose prose-sm max-w-none overflow-x-hidden overflow-y-auto',
-          '[&_img]:max-w-full [&_img]:max-h-[300px] [&_img]:h-auto [&_img]:object-contain [&_img]:block [&_img]:cursor-pointer',
+          'rich-text-editor w-full min-h-[120px] max-h-[400px] p-3 focus:outline-none prose prose-sm max-w-none overflow-x-hidden overflow-y-auto',
+          '[&_img]:!max-w-full [&_img]:!max-h-[300px] [&_img]:!h-auto [&_img]:!object-contain [&_img]:block [&_img]:cursor-pointer',
           'prose-headings:font-semibold prose-headings:text-foreground',
           'prose-p:text-foreground prose-p:leading-relaxed',
           'prose-strong:font-semibold prose-strong:text-foreground',
@@ -918,7 +946,9 @@ export function RichTextEditor({
         )}
         style={{
           whiteSpace: 'pre-wrap',
-          wordWrap: 'break-word'
+          wordWrap: 'break-word',
+          wordBreak: 'break-word',
+          overflowWrap: 'break-word'
         }}
         data-placeholder={placeholder}
       />

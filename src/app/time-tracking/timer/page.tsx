@@ -612,11 +612,17 @@ export default function TimerPage() {
     if (!selectedProject) return
 
     const searchTerm = taskSearch.trim()
-    if (!searchTerm) return
 
     if (taskSearchTimerRef.current) {
       clearTimeout(taskSearchTimerRef.current)
     }
+
+    // When search is cleared, reload the initial task list immediately
+    if (!searchTerm) {
+      fetchTasks(selectedProject, undefined, 1)
+      return
+    }
+
     taskSearchTimerRef.current = setTimeout(() => {
       fetchTasks(selectedProject, searchTerm, 1)
     }, 300)
@@ -1246,18 +1252,18 @@ export default function TimerPage() {
                               {tasks.filter((task) => {
                                 // Client-side filtering by search term
 
-                               // If search is empty or only dots, show all
-                               if (!taskSearch || taskSearch.trim() === '' || /^\.+$/.test(taskSearch.trim())) return true
-                               const searchLower = taskSearch.toLowerCase().trim()
+                                // If search is empty or only dots, show all
+                                if (!taskSearch || taskSearch.trim() === '' || /^\.+$/.test(taskSearch.trim())) return true
+                                const searchLower = taskSearch.toLowerCase().trim()
                                 // Normalize: strip trailing dots for number-like search
                                 const searchNormalized = searchLower.replace(/\.+$/, '')
 
-                               // Compare with title
+                                // Compare with title
                                 if (task.title && task.title.toLowerCase().includes(searchLower)) {
                                   return true
                                 }
 
-                               // Compare with displayId (convert to string, handling dots)
+                                // Compare with displayId (convert to string, handling dots)
                                 if (task.displayId !== undefined && task.displayId !== null && task.displayId !== '') {
                                   const displayIdStr = String(task.displayId).toLowerCase()
                                   // Match both the original search and normalized version
@@ -1299,7 +1305,7 @@ export default function TimerPage() {
                                           {task.status} • {task.priority}
                                           {isBillableDisabled && ' • Billable time not allowed'}
                                         </div>
-                                     </div>
+                                      </div>
                                     </div>
                                   </SelectItem>
                                 )
