@@ -970,21 +970,19 @@ export async function DELETE(
     const organizationId = user.organization
     const taskId = params.id
 
-    // Check if user has permission to delete all tasks
-    const [hasTaskDeleteAll, hasProjectViewAll] = await Promise.all([
-      PermissionService.hasPermission(userId, Permission.TASK_DELETE_ALL),
-      PermissionService.hasPermission(userId, Permission.PROJECT_VIEW_ALL)
-    ]);
+    const roleStr = typeof user.role === 'string' ? user.role : ''
+    const isAdmin = ['admin', 'super_admin', 'superadmin'].includes(roleStr.toLowerCase())
+    if (!isAdmin) {
+      return NextResponse.json(
+        { error: 'Only Admins can delete tasks' },
+        { status: 403 }
+      )
+    }
 
-    // Build query - if user has TASK_DELETE_ALL or PROJECT_VIEW_ALL, they can delete any task
     const deleteQuery: any = {
       _id: taskId,
       organization: organizationId
     };
-
-    if (!hasTaskDeleteAll && !hasProjectViewAll) {
-      deleteQuery.createdBy = userId;
-    }
 
     const task = await Task.findOneAndDelete(deleteQuery)
 

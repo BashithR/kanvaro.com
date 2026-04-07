@@ -136,6 +136,8 @@ export default function KanbanBoard({ projectId, filters, onProjectChange, onCre
   const [projectSearchQuery, setProjectSearchQuery] = useState('')
 
   const router = useRouter()
+  const { hasPermission, permissions } = usePermissions()
+  const isAdmin = typeof permissions?.userRole === 'string' && ['admin', 'super_admin', 'superadmin'].includes(permissions.userRole.toLowerCase())
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -579,6 +581,7 @@ export default function KanbanBoard({ projectId, filters, onProjectChange, onCre
               getPriorityColor={getPriorityColor}
               getTypeColor={getTypeColor}
               isDragOverlay
+              canDelete={isAdmin}
             //  onEdit={onEditTask}
               onDelete={onDeleteTask}
             />

@@ -91,6 +91,7 @@ export default function ProjectsPage() {
   const { success: notifySuccess, error: notifyError } = useNotify()
   const { formatDate } = useDateTime()
   const orgCurrency = organization?.currency || 'USD'
+  const isAdmin = typeof user?.role === 'string' && ['admin', 'super_admin', 'superadmin'].includes(user.role.toLowerCase())
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [searching, setSearching] = useState(false)
@@ -483,19 +484,22 @@ export default function ProjectsPage() {
                                   Edit Project
                                 </DropdownMenuItem>
                               </PermissionGate>
-                              <PermissionGate permission={Permission.PROJECT_DELETE} projectId={project._id}>
+                              <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   onClick={(e) => {
                                     e.stopPropagation()
+                                    if (!isAdmin) return
                                     handleDeleteClick(project._id)
                                   }}
+                                  disabled={!isAdmin}
+                                  title={!isAdmin ? 'Only admins can delete projects' : undefined}
                                   className="text-destructive focus:text-destructive"
                                 >
                                   <Trash2 className="h-4 w-4 mr-2" />
                                   Delete Project
                                 </DropdownMenuItem>
-                              </PermissionGate>
+                              </>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
@@ -686,19 +690,21 @@ export default function ProjectsPage() {
                                     Edit Project
                                   </DropdownMenuItem>
                                 </PermissionGate>
-                                <PermissionGate permission={Permission.PROJECT_DELETE} projectId={project._id}>
-                                  <DropdownMenuSeparator />
+                                <>\n                                  <DropdownMenuSeparator />
                                   <DropdownMenuItem
                                     onClick={(e) => {
                                       e.stopPropagation()
+                                      if (!isAdmin) return
                                       handleDeleteClick(project._id)
                                     }}
+                                      disabled={!isAdmin}
+                                      title={!isAdmin ? 'Only admins can delete projects' : undefined}
                                     className="text-destructive focus:text-destructive"
                                   >
                                     <Trash2 className="h-4 w-4 mr-2" />
                                     Delete Project
                                   </DropdownMenuItem>
-                                </PermissionGate>
+                                </>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>

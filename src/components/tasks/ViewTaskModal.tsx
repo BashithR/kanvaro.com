@@ -28,9 +28,10 @@ interface ViewTaskModalProps {
   onClose: () => void
   task: any
   onEdit: () => void
-  onDelete: () => void
+  onDelete?: () => void
   canEdit?: boolean
   canDelete?: boolean
+  hideDeleteWhenDisabled?: boolean
 }
 
 export default function ViewTaskModal({ 
@@ -40,7 +41,8 @@ export default function ViewTaskModal({
   onEdit, 
   onDelete,
   canEdit = true,
-  canDelete = true
+  canDelete = true,
+  hideDeleteWhenDisabled = false
 }: ViewTaskModalProps) {
   if (!isOpen || !task) return null
 
@@ -123,21 +125,21 @@ export default function ViewTaskModal({
               <CardDescription>Task Details</CardDescription>
             </div>
             <div className="flex items-center space-x-2">
-              {canEdit && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onEdit}
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit
-                </Button>
-              )}
-              {canDelete && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onEdit}
+                disabled={!canEdit}
+              >
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+              {onDelete && (!hideDeleteWhenDisabled || canDelete) && (
                 <Button
                   variant="destructive"
                   size="sm"
                   onClick={onDelete}
+                  disabled={!canDelete}
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Delete

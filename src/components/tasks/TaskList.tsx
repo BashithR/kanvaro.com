@@ -79,9 +79,10 @@ export default function TaskList({ projectId, onCreateTask }: TaskListProps) {
   const router = useRouter()
   const { formatDate } = useDateTime()
   const { success: notifySuccess, error: notifyError } = useNotify()
-  const { hasPermission } = usePermissions()
+  const { hasPermission, permissions } = usePermissions()
+  const isAdmin = typeof permissions?.userRole === 'string' && ['admin', 'super_admin', 'superadmin'].includes(permissions.userRole.toLowerCase())
   const canEditTask = hasPermission(Permission.TASK_UPDATE, projectId)
-  const canDeleteTask = hasPermission(Permission.TASK_DELETE, projectId)
+  const canDeleteTask = isAdmin
   const canChangeTaskStatus = hasPermission(Permission.TASK_CHANGE_STATUS, projectId)
   const canManageProject = hasPermission(Permission.PROJECT_UPDATE, projectId)
   const [tasks, setTasks] = useState<Task[]>([])
@@ -638,17 +639,16 @@ export default function TaskList({ projectId, onCreateTask }: TaskListProps) {
                       <DropdownMenuItem onClick={() => handleViewTask(task)}>
                         View Details
                       </DropdownMenuItem>
-                      <PermissionGate permission={Permission.TASK_DELETE} projectId={projectId}>
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => handleDeleteTask(task)}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            Delete Task
-                          </DropdownMenuItem>
-                        </>
-                      </PermissionGate>
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => handleDeleteTask(task)}
+                          disabled={!canDeleteTask}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          Delete Task
+                        </DropdownMenuItem>
+                      </>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
