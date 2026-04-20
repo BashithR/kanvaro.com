@@ -377,7 +377,7 @@ export function Timer({
 
   if (activeTimer) {
     return (
-      <Card>
+      <Card className="overflow-hidden">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Clock className="h-5 w-5" />
@@ -397,20 +397,26 @@ export function Timer({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <div>
+          <div className="space-y-2 min-w-0 max-h-48 overflow-y-auto pr-1">
+            <div className="min-w-0">
               <Label className="text-sm font-medium">Project</Label>
-              <p className="text-sm text-muted-foreground">{activeTimer.project.name}</p>
+              <p className="text-sm text-muted-foreground break-words whitespace-normal" title={activeTimer.project.name}>
+                {activeTimer.project.name}
+              </p>
             </div>
             {activeTimer.task && (
-              <div>
+              <div className="min-w-0">
                 <Label className="text-sm font-medium">Task</Label>
-                <p className="text-sm text-muted-foreground">{activeTimer.task.title}</p>
+                <p className="text-sm text-muted-foreground break-words whitespace-normal" title={activeTimer.task.title}>
+                  {activeTimer.task.title}
+                </p>
               </div>
             )}
-            <div>
+            <div className="min-w-0">
               <Label className="text-sm font-medium">Memo</Label>
-              <p className="text-sm text-muted-foreground">{activeTimer.description}</p>
+              <p className="text-sm text-muted-foreground break-words whitespace-pre-wrap" title={activeTimer.description}>
+                {activeTimer.description}
+              </p>
             </div>
           </div>
 

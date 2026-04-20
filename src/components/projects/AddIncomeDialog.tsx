@@ -1,24 +1,37 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/Dialog'
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/Badge'
-import { Loader2, Upload, X, Paperclip, Calendar as CalendarIcon } from 'lucide-react'
+import { Calendar as CalendarIcon, DollarSign, Loader2, Paperclip, Upload, X } from 'lucide-react'
 import { useNotify } from '@/lib/notify'
 
 type IncomeCategory = 'invoice' | 'consulting' | 'other'
 type IncomeSubCategory = 'amc' | 'cr'
+
+type IncomeInput = {
+  _id?: string
+  invoiceNumber?: string
+  category?: IncomeCategory
+  subCategory?: IncomeSubCategory
+  description?: string
+  utilizableBudget?: number
+  approvedDate?: string | Date
+  actualStartDate?: string | Date
+  attachments?: UploadedAttachment[]
+}
 
 interface AddIncomeDialogProps {
   open: boolean
   onClose: () => void
   projectId: string
   onSuccess: () => void
+  income?: IncomeInput | null
 }
 
 type UploadedAttachment = {
@@ -30,7 +43,13 @@ type UploadedAttachment = {
   uploadedBy?: string
 }
 
-export function AddIncomeDialog({ open, onClose, projectId, onSuccess }: AddIncomeDialogProps) {
+const getErrorMessage = (err: unknown, fallback: string) => {
+  if (err instanceof Error && err.message) return err.message
+  if (typeof err === 'string' && err) return err
+  return fallback
+}
+
+export function AddIncomeDialog({ open, onClose, projectId, onSuccess, income }: AddIncomeDialogProps) {
   const { error: notifyError } = useNotify()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -52,36 +71,53 @@ export function AddIncomeDialog({ open, onClose, projectId, onSuccess }: AddInco
   useEffect(() => {
     if (!open) return
 
-    // Reset on open
+    const isEditing = !!income?._id
+
+    const toDateInputValue = (value?: string | Date) => {
+      if (!value) return ''
+      const date = value instanceof Date ? value : new Date(value)
+      if (Number.isNaN(date.getTime())) return ''
+      return date.toISOString().slice(0, 10)
+    }
+
     setSubmitting(false)
     setUploading(false)
     setFormData({
-      invoiceNumber: '',
-      category: '',
-      subCategory: '',
-      description: '',
-      utilizableBudget: '',
-      approvedDate: '',
-      actualStartDate: '',
-      attachments: []
+      invoiceNumber: isEditing ? String(income?.invoiceNumber || '') : '',
+      category: isEditing ? (income?.category || '') : '',
+      subCategory: isEditing ? (income?.subCategory || '') : '',
+      description: isEditing ? String(income?.description || '') : '',
+      utilizableBudget:
+        isEditing && income?.utilizableBudget !== undefined && income?.utilizableBudget !== null
+          ? String(income.utilizableBudget)
+          : '',
+      approvedDate: isEditing ? toDateInputValue(income?.approvedDate) : '',
+      actualStartDate: isEditing ? toDateInputValue(income?.actualStartDate) : '',
+      attachments: isEditing && Array.isArray(income?.attachments) ? income.attachments ?? [] : []
     })
+  }, [open, income])
 
-    // Fetch current user for attachment metadata (optional but consistent with expenses)
+  useEffect(() => {
+    if (!open) return
+
     const fetchCurrentUser = async () => {
       try {
         const res = await fetch('/api/auth/me')
         if (res.ok) {
-          const data = await res.json()
-          setCurrentUser({ id: data.id })
-        } else {
-          setCurrentUser(null)
+          const data: unknown = await res.json()
+          const userId = (data as { id?: unknown })?.id
+          if (typeof userId === 'string' && userId) {
+            setCurrentUser({ id: userId })
+            return
+          }
         }
+        setCurrentUser(null)
       } catch {
         setCurrentUser(null)
       }
     }
 
-    fetchCurrentUser()
+    void fetchCurrentUser()
   }, [open])
 
   const isInvoiceCategory = formData.category === 'invoice'
@@ -91,6 +127,7 @@ export function AddIncomeDialog({ open, onClose, projectId, onSuccess }: AddInco
     formData.category !== '' &&
     formData.description.trim() !== '' &&
     formData.utilizableBudget !== '' &&
+    formData.approvedDate !== '' &&
     (!isInvoiceCategory || formData.subCategory !== '')
 
   const handleFileUpload = async (files: FileList) => {
@@ -135,10 +172,10 @@ export function AddIncomeDialog({ open, onClose, projectId, onSuccess }: AddInco
         ...prev,
         attachments: [...prev.attachments, ...uploaded]
       }))
-    } catch (err: any) {
+    } catch (err: unknown) {
       notifyError({
         title: 'Upload Failed',
-        message: err?.message || 'Failed to upload attachment(s).'
+        message: getErrorMessage(err, 'Failed to upload attachment(s).')
       })
     } finally {
       setUploading(false)
@@ -166,18 +203,22 @@ export function AddIncomeDialog({ open, onClose, projectId, onSuccess }: AddInco
     try {
       setSubmitting(true)
 
+      const isEditing = !!income?._id
+      const failureTitle = isEditing ? 'Failed to Update Income' : 'Failed to Add Income'
+
       const response = await fetch(`/api/projects/${projectId}/income`, {
-        method: 'POST',
+        method: isEditing ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
+          incomeId: isEditing ? income?._id : undefined,
           invoiceNumber: formData.invoiceNumber.trim(),
           category: formData.category,
           subCategory: isInvoiceCategory ? formData.subCategory : undefined,
           description: formData.description,
           utilizableBudget: parseFloat(formData.utilizableBudget),
-          approvedDate: formData.approvedDate || undefined,
+          approvedDate: formData.approvedDate,
           actualStartDate: formData.actualStartDate || undefined,
           attachments: formData.attachments.map(att => ({
             ...att,
@@ -191,7 +232,7 @@ export function AddIncomeDialog({ open, onClose, projectId, onSuccess }: AddInco
 
       if (!response.ok) {
         notifyError({
-          title: 'Failed to Add Income',
+          title: failureTitle,
           message: data?.error || 'Request failed. Please try again.'
         })
         return
@@ -199,18 +240,18 @@ export function AddIncomeDialog({ open, onClose, projectId, onSuccess }: AddInco
 
       if (!data?.success) {
         notifyError({
-          title: 'Failed to Add Income',
-          message: data?.error || 'Failed to add income. Please try again.'
+          title: failureTitle,
+          message: data?.error || 'Request failed. Please try again.'
         })
         return
       }
 
       onSuccess()
       onClose()
-    } catch (err: any) {
+    } catch (err: unknown) {
       notifyError({
-        title: 'Failed to Add Income',
-        message: err?.message || 'Failed to add income. Please try again.'
+        title: income?._id ? 'Failed to Update Income' : 'Failed to Add Income',
+        message: getErrorMessage(err, 'Request failed. Please try again.')
       })
     } finally {
       setSubmitting(false)
@@ -219,18 +260,26 @@ export function AddIncomeDialog({ open, onClose, projectId, onSuccess }: AddInco
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Add Income</DialogTitle>
-          <DialogDescription>
-            Record a new income entry for this project.
+      <DialogContent
+        className="max-w-2xl p-0 gap-0"
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
+        <DialogHeader className="border-b border-border/50 bg-muted/20">
+          <DialogTitle className="text-xl font-semibold flex items-center gap-2">
+            <div className="p-2 rounded-lg bg-primary/10 text-primary">
+              <DollarSign className="h-5 w-5" />
+            </div>
+            {income?._id ? 'Edit Income' : 'Add Income'}
+          </DialogTitle>
+          <DialogDescription className="text-muted-foreground ml-11">
+            {income?._id ? 'Update this income entry for the project.' : 'Record a new income entry for this project.'}
           </DialogDescription>
         </DialogHeader>
 
-        <form
-          onSubmit={handleSubmit}
-          className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 pb-4 sm:pb-6 space-y-6"
-        >
+        <form onSubmit={handleSubmit} className="flex flex-col min-h-0">
+          <DialogBody className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <Label htmlFor="invoiceNumber">Invoice Number <span className="text-destructive">*</span></Label>
@@ -313,7 +362,7 @@ export function AddIncomeDialog({ open, onClose, projectId, onSuccess }: AddInco
             </div>
 
             <div className="space-y-2 md:col-span-1">
-              <Label htmlFor="approvedDate">Approved Date</Label>
+              <Label htmlFor="approvedDate">Approved Date <span className="text-destructive">*</span></Label>
               <div className="relative">
                 <Input
                   id="approvedDate"
@@ -321,6 +370,7 @@ export function AddIncomeDialog({ open, onClose, projectId, onSuccess }: AddInco
                   value={formData.approvedDate}
                   onChange={(e) => setFormData(prev => ({ ...prev, approvedDate: e.target.value }))}
                   className="pl-10"
+                  required
                 />
                 <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               </div>
@@ -410,7 +460,9 @@ export function AddIncomeDialog({ open, onClose, projectId, onSuccess }: AddInco
             )}
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
+          </DialogBody>
+
+          <DialogFooter className="border-t border-border/50">
             <Button type="button" variant="outline" onClick={onClose} disabled={submitting || uploading}>
               Cancel
             </Button>
@@ -421,10 +473,10 @@ export function AddIncomeDialog({ open, onClose, projectId, onSuccess }: AddInco
                   Saving...
                 </>
               ) : (
-                'Add Income'
+                income?._id ? 'Save Changes' : 'Add Income'
               )}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

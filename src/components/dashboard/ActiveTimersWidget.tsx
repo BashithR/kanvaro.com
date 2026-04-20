@@ -457,7 +457,7 @@ export function ActiveTimersWidget({ organizationId }: ActiveTimersWidgetProps) 
                   className="border rounded-lg p-3 space-y-2 hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 overflow-x-hidden">
                       <div className="flex items-center gap-2 mb-1">
                         <User className="h-3 w-3 text-muted-foreground flex-shrink-0" />
                         <span className="text-sm font-medium truncate">
@@ -474,12 +474,12 @@ export function ActiveTimersWidget({ organizationId }: ActiveTimersWidgetProps) 
                         <span className="truncate">{timer.project.name}</span>
                       </div>
                       {timer.task && (
-                        <div className="text-xs text-muted-foreground ml-5 truncate">
+                        <div className="text-xs text-muted-foreground ml-5 break-words whitespace-normal" title={timer.task.title}>
                           Task: {timer.task.title}
                         </div>
                       )}
                       {timer.description && (
-                        <div className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                        <div className="text-xs text-muted-foreground mt-1 break-words whitespace-pre-wrap" title={timer.description}>
                           {timer.description}
                         </div>
                       )}

@@ -12,6 +12,7 @@ import { invalidateCache } from '@/lib/redis'
 import { PermissionService } from '@/lib/permissions/permission-service'
 import { Permission } from '@/lib/permissions/permission-definitions'
 import { logTaskFieldChanges } from '@/lib/task-activity-logger'
+import { logActivity } from '@/lib/activity-logger'
 
 const TASK_STATUS_SET = new Set<TaskStatus>(TASK_STATUS_VALUES)
 
@@ -646,6 +647,83 @@ export async function PUT(
       currentTask,
       updateData
     ).catch(err => console.error('Failed to log task update activities:', err))
+
+    // Log organization-wide activity (non-blocking)
+    const taskProjectName = (typeof task.project === 'object' && task.project !== null && 'name' in task.project)
+      ? task.project.name
+      : 'Unknown Project'
+    const taskProjectIdForLog = (typeof task.project === 'object' && task.project !== null && '_id' in task.project)
+      ? String(task.project._id)
+      : task.project ? String(task.project) : undefined
+
+    // Determine the most specific action
+    if (updateData.status && updateData.status !== currentTask.status) {
+      logActivity({
+        organizationId,
+        userId,
+        action: 'task_status_changed',
+        entityType: 'task',
+        entityId: taskId,
+        entityName: task.title,
+        projectId: taskProjectIdForLog,
+        projectName: taskProjectName,
+        details: {
+          oldStatus: currentTask.status,
+          newStatus: updateData.status,
+          displayId: task.displayId
+        }
+      }).catch(err => console.error('Failed to log task status change activity:', err))
+    } else {
+      logActivity({
+        organizationId,
+        userId,
+        action: 'task_updated',
+        entityType: 'task',
+        entityId: taskId,
+        entityName: task.title,
+        projectId: taskProjectIdForLog,
+        projectName: taskProjectName,
+        details: {
+          changedFields: Object.keys(updateData).filter(k => !k.startsWith('_')),
+          displayId: task.displayId
+        }
+      }).catch(err => console.error('Failed to log task update activity:', err))
+    }
+
+    // Log new assignments if assignedTo changed
+    if (Object.prototype.hasOwnProperty.call(updateData, 'assignedTo') && Array.isArray(updateData.assignedTo)) {
+      const oldAssigneeIds = Array.isArray(currentTask.assignedTo)
+        ? currentTask.assignedTo.map((a: any) => {
+          const uid = typeof a === 'object' && a.user
+            ? (typeof a.user === 'object' ? a.user._id?.toString() : a.user.toString())
+            : a.toString()
+          return uid
+        })
+        : []
+      const newAssignees = updateData.assignedTo.filter((a: any) => {
+        const uid = typeof a === 'object' && a.user ? a.user.toString() : a.toString()
+        return !oldAssigneeIds.includes(uid)
+      })
+      newAssignees.forEach((assignee: any) => {
+        logActivity({
+          organizationId,
+          userId,
+          action: 'task_assigned',
+          entityType: 'task',
+          entityId: taskId,
+          entityName: task.title,
+          projectId: taskProjectIdForLog,
+          projectName: taskProjectName,
+          details: {
+            assigneeId: typeof assignee === 'object' && assignee.user ? assignee.user : assignee,
+            assigneeName: assignee.firstName && assignee.lastName
+              ? `${assignee.firstName} ${assignee.lastName}`.trim()
+              : undefined,
+            displayId: task.displayId
+          }
+        }).catch(err => console.error('Failed to log task assignment activity:', err))
+      })
+    }
 
     // Run async operations in background without blocking response
     const taskIdStr = String(task._id || taskId)

@@ -58,6 +58,7 @@ export async function GET(
     const expenses = await Expense.find({ project: projectId })
       .populate('addedBy', 'firstName lastName email')
       .populate('paidBy', 'firstName lastName email')
+      .populate('attachments.uploadedBy', 'firstName lastName email')
       .sort({ expenseDate: -1 })
 
     return NextResponse.json({

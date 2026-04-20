@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Folder, Eye, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { usePermissions } from '@/lib/permissions'
+import { Permission } from '@/lib/permissions/permission-definitions'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,31 +50,18 @@ export default function TestSuiteCards({
   const [suites, setSuites] = useState<TestSuite[]>([])
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
-  const [userRole, setUserRole] = useState<string | null>(null)
-  const [loadingUserRole, setLoadingUserRole] = useState(true)
   const lastHandledHighlightRef = useRef<string | null>(null)
+
+  const { hasPermission, loading: permissionsLoading } = usePermissions()
 
   useEffect(() => {
     fetchTestSuites()
-    fetchUserRole()
   }, [projectId])
 
-  const fetchUserRole = async () => {
-    try {
-      setLoadingUserRole(true)
-      const response = await fetch('/api/auth/me')
-      const data = await response.json()
-      if (response.ok && data.role) {
-        setUserRole(data.role)
-      }
-    } catch (error) {
-      console.error('Error fetching user role:', error)
-    } finally {
-      setLoadingUserRole(false)
-    }
-  }
-
-  const isAdmin = userRole && ['admin', 'super_admin', 'superadmin'].includes(userRole.toLowerCase())
+  const canDeleteSuite =
+    !!projectId &&
+    !permissionsLoading &&
+    hasPermission(Permission.TEST_SUITE_DELETE, projectId)
 
   const fetchTestSuites = async () => {
     if (!projectId) {
@@ -216,7 +205,7 @@ export default function TestSuiteCards({
                         Edit
                       </DropdownMenuItem>
                     )}
-                    {onSuiteDelete && isAdmin && (
+                    {onSuiteDelete && canDeleteSuite && (
                       <DropdownMenuItem
                         onClick={() => onSuiteDelete(suite._id, suite.name)}
                         className="text-destructive"
@@ -225,10 +214,10 @@ export default function TestSuiteCards({
                         Delete
                       </DropdownMenuItem>
                     )}
-                    {onSuiteDelete && !isAdmin && (
+                    {onSuiteDelete && !canDeleteSuite && (
                       <DropdownMenuItem disabled className="text-muted-foreground">
                         <Trash2 className="h-4 w-4 mr-2" />
-                        Delete (Admin only)
+                        Delete (No permission)
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>
