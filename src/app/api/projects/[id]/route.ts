@@ -7,6 +7,7 @@ import { PermissionService } from '@/lib/permissions/permission-service'
 import { Permission, Role, ROLE_PERMISSIONS } from '@/lib/permissions/permission-definitions'
 import { Types } from 'mongoose'
 import { User } from '@/models/User'
+import { logActivity } from '@/lib/activity-logger'
 
 export async function GET(
   request: NextRequest,
@@ -348,6 +349,13 @@ export async function PUT(
     // Always use $set operator for proper MongoDB updates
     const finalUpdateData = updateObject
 
+    // Fetch old project before update for team member comparison
+    const oldProject = await Project.findOne({
+      _id: projectId,
+      organization: organizationId,
+      is_deleted: { $ne: true }
+    }).populate('teamMembers.memberId', 'firstName lastName email').lean()
+
     // Find and update project (only update non-deleted projects)
     const project = await Project.findOneAndUpdate(
       {
@@ -367,6 +375,98 @@ export async function PUT(
         { error: 'Project not found' },
         { status: 404 }
       )
+    }
+
+    // Log activity: project updated (non-blocking)
+    logActivity({
+      organizationId: String(organizationId),
+      userId,
+      action: 'project_updated',
+      entityType: 'project',
+      entityId: String(projectId),
+      entityName: project.name,
+      projectId: String(projectId),
+      projectName: project.name,
+      details: {
+        changedFields: Object.keys(updateData).filter(k => k !== 'settings'),
+        status: project.status
+      }
+    }).catch(err => console.error('Failed to log project update activity:', err))
+
+    // Log team member additions/removals (non-blocking)
+    if (updateData.teamMembers !== undefined && oldProject) {
+      const getOldMemberIds = (members: any[]) =>
+        (members || []).map((m: any) => {
+          const id = m.memberId?._id?.toString() || m.memberId?.toString()
+          return id
+        }).filter(Boolean)
+
+      const getNewMemberIds = (members: any[]) =>
+        (members || []).map((m: any) => {
+          const id = m.memberId?._id?.toString() || m.memberId?.toString()
+          return id
+        }).filter(Boolean)
+
+      const oldMemberIds = getOldMemberIds((oldProject as any).teamMembers || [])
+      const newMemberIds = getNewMemberIds(project.teamMembers || [])
+
+      const addedIds = newMemberIds.filter((id: string) => !oldMemberIds.includes(id))
+      const removedIds = oldMemberIds.filter((id: string) => !newMemberIds.includes(id))
+
+      // Log added members
+      const newMembersPopulated = project.teamMembers || []
+      addedIds.forEach((memberId: string) => {
+        const member = newMembersPopulated.find((m: any) => {
+          const mId = m.memberId?._id?.toString() || m.memberId?.toString()
+          return mId === memberId
+        })
+        const memberName = member?.memberId?.firstName && member?.memberId?.lastName
+          ? `${member.memberId.firstName} ${member.memberId.lastName}`
+          : undefined
+
+        logActivity({
+          organizationId: String(organizationId),
+          userId,
+          action: 'project_member_added',
+          entityType: 'project',
+          entityId: String(projectId),
+          entityName: project.name,
+          projectId: String(projectId),
+          projectName: project.name,
+          details: {
+            memberId,
+            memberName,
+            memberRole: member?.role || undefined
+          }
+        }).catch(err => console.error('Failed to log project member add activity:', err))
+      })
+
+      // Log removed members
+      const oldMembersPopulated = (oldProject as any).teamMembers || []
+      removedIds.forEach((memberId: string) => {
+        const member = oldMembersPopulated.find((m: any) => {
+          const mId = m.memberId?._id?.toString() || m.memberId?.toString()
+          return mId === memberId
+        })
+        const memberName = member?.memberId?.firstName && member?.memberId?.lastName
+          ? `${member.memberId.firstName} ${member.memberId.lastName}`
+          : undefined
+
+        logActivity({
+          organizationId: String(organizationId),
+          userId,
+          action: 'project_member_removed',
+          entityType: 'project',
+          entityId: String(projectId),
+          entityName: project.name,
+          projectId: String(projectId),
+          projectName: project.name,
+          details: {
+            memberId,
+            memberName
+          }
+        }).catch(err => console.error('Failed to log project member remove activity:', err))
+      })
     }
 
     return NextResponse.json({

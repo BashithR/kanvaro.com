@@ -7,6 +7,7 @@ import { Project } from '@/models/Project'
 import { User } from '@/models/User'
 import { Organization } from '@/models/Organization'
 import { applyRoundingRules } from '@/lib/utils'
+import { logActivity } from '@/lib/activity-logger'
 
 type EffectiveTimeTrackingSettings = {
   maxSessionHours?: number
@@ -581,6 +582,21 @@ export async function POST(request: NextRequest) {
     await activeTimer.populate('project', 'name settings')
     await activeTimer.populate('task', 'title')
 
+    // Log activity: timer started (non-blocking)
+    const projectNameForLog = (activeTimer.project as any)?.name || 'Unknown Project'
+    const taskTitleForLog = (activeTimer.task as any)?.title || undefined
+    logActivity({
+      organizationId: String(organizationId),
+      userId: String(userId),
+      action: 'timer_started',
+      entityType: 'timer',
+      entityId: String(activeTimer._id),
+      entityName: taskTitleForLog || projectNameForLog,
+      projectId: String(projectId),
+      projectName: projectNameForLog,
+      details: { taskTitle: taskTitleForLog, description: finalDescription }
+    }).catch(err => console.error('Failed to log timer start activity:', err))
+
     return NextResponse.json({
       message: 'Timer started successfully',
       activeTimer: {
@@ -621,12 +637,29 @@ export async function PUT(request: NextRequest) {
 
     const now = new Date()
 
+    const timerProjectName = (activeTimer.project as any)?.name || 'Unknown Project'
+    const timerTaskTitle = (activeTimer.task as any)?.title || undefined
+    const timerOrgId = String(getIdString(activeTimer.organization) || organizationId)
+    const timerProjectId = getIdString(activeTimer.project) || undefined
+
     switch (action) {
       case 'pause':
         if (activeTimer.pausedAt) {
           return NextResponse.json({ error: 'Timer is already paused' }, { status: 400 })
         }
         activeTimer.pausedAt = now
+        // Log activity: timer paused (non-blocking)
+        logActivity({
+          organizationId: timerOrgId,
+          userId: String(userId),
+          action: 'timer_paused',
+          entityType: 'timer',
+          entityId: String(activeTimer._id),
+          entityName: timerTaskTitle || timerProjectName,
+          projectId: timerProjectId,
+          projectName: timerProjectName,
+          details: { taskTitle: timerTaskTitle }
+        }).catch(err => console.error('Failed to log timer pause activity:', err))
         break
 
       case 'resume':
@@ -636,6 +669,18 @@ export async function PUT(request: NextRequest) {
         const pausedDuration = (now.getTime() - activeTimer.pausedAt.getTime()) / (1000 * 60)
         activeTimer.totalPausedDuration += pausedDuration
         activeTimer.pausedAt = undefined
+        // Log activity: timer resumed (non-blocking)
+        logActivity({
+          organizationId: timerOrgId,
+          userId: String(userId),
+          action: 'timer_resumed',
+          entityType: 'timer',
+          entityId: String(activeTimer._id),
+          entityName: timerTaskTitle || timerProjectName,
+          projectId: timerProjectId,
+          projectName: timerProjectName,
+          details: { taskTitle: timerTaskTitle }
+        }).catch(err => console.error('Failed to log timer resume activity:', err))
         break
 
       case 'stop': {
@@ -645,6 +690,24 @@ export async function PUT(request: NextRequest) {
           tags,
           reason: 'manual'
         })
+        // Log activity: timer stopped (non-blocking)
+        if (stopResult.status === 200 && !stopResult.body.alreadyStopped) {
+          logActivity({
+            organizationId: timerOrgId,
+            userId: String(userId),
+            action: 'timer_stopped',
+            entityType: 'timer',
+            entityId: String(activeTimer._id),
+            entityName: timerTaskTitle || timerProjectName,
+            projectId: timerProjectId,
+            projectName: timerProjectName,
+            details: {
+              taskTitle: timerTaskTitle,
+              duration: stopResult.body.duration,
+              hasTimeLogged: stopResult.body.hasTimeLogged
+            }
+          }).catch(err => console.error('Failed to log timer stop activity:', err))
+        }
         return NextResponse.json(stopResult.body, { status: stopResult.status })
       }
 

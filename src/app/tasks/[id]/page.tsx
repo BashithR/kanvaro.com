@@ -17,6 +17,7 @@ import {
   CheckCircle,
   AlertTriangle,
   Play,
+  Pause,
   XCircle,
   Target,
   Zap,
@@ -223,6 +224,8 @@ export default function TaskDetailPage() {
   const activeTimerTickStartMsRef = useRef<number | null>(null)
   const activeTimerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [stoppingTimer, setStoppingTimer] = useState(false)
+  const [timerActionLoading, setTimerActionLoading] = useState<'pause' | 'resume' | null>(null)
+  const [showStopTimerConfirmModal, setShowStopTimerConfirmModal] = useState(false)
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState<string>('')
@@ -380,6 +383,42 @@ export default function TaskDetailPage() {
       setStoppingTimer(false)
     }
   }, [activeTimer, currentOrganizationId, currentUserId, formatDuration, loadActiveTimer, notifyError, notifySuccess])
+
+  const handlePauseResumeTimer = useCallback(async () => {
+    if (!currentUserId || !currentOrganizationId || !activeTimer) return
+
+    const isPaused = Boolean((activeTimer as any)?.isPaused || (activeTimer as any)?.pausedAt)
+    const action: 'pause' | 'resume' = isPaused ? 'resume' : 'pause'
+
+    setTimerActionLoading(action)
+    try {
+      const response = await fetch('/api/time-tracking/timer', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUserId,
+          organizationId: currentOrganizationId,
+          action
+        })
+      })
+
+      const data = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        notifyError({ title: data?.error || `Failed to ${action} timer` })
+        return
+      }
+
+      setActiveTimer(data?.activeTimer ?? null)
+      notifySuccess({ title: action === 'pause' ? 'Timer paused' : 'Timer resumed' })
+      loadActiveTimer()
+    } catch (error) {
+      console.error(`Failed to ${action} timer:`, error)
+      notifyError({ title: `Failed to ${action} timer` })
+    } finally {
+      setTimerActionLoading(null)
+    }
+  }, [activeTimer, currentOrganizationId, currentUserId, loadActiveTimer, notifyError, notifySuccess])
 
   useEffect(() => {
     if (!currentUserId || !currentOrganizationId) return
@@ -1571,63 +1610,104 @@ export default function TaskDetailPage() {
                     {task.displayId}
                   </span>
                 </h1>
-                <div className="flex flex-row items-stretch sm:items-center gap-2 flex-shrink-0 flex-wrap sm:flex-nowrap ml-auto justify-end">
-                  {isRelevantActiveTimer && (
-                    <Badge variant="outline" className="min-h-[36px] inline-flex items-center gap-2">
-                      <Clock className="h-4 w-4" />
-                      {activeTimerDisplay}
-                    </Badge>
-                  )}
-                  {isRelevantActiveTimer && (
+                <div className="flex flex-col gap-2 flex-shrink-0 ml-auto w-full sm:w-auto sm:items-end">
+                  <div className="flex flex-row items-stretch sm:items-center gap-2 flex-wrap justify-end">
                     <Button
-                      variant="destructive"
-                      onClick={handleStopTimer}
-                      disabled={stoppingTimer}
+                      variant="outline"
+                      disabled={!editAllowed}
+                      onClick={() => {
+                        if (!editAllowed) return
+                        router.push(`/tasks/${taskId}/edit`)
+                      }}
                       className="min-h-[36px] w-full sm:w-auto"
                     >
-                      <XCircle className="h-4 w-4 mr-2" />
-                      Stop
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit
                     </Button>
-                  )}
-                  <Button
-                    onClick={() => setShowStartTimerModal(true)}
-                    disabled={
-                      isActiveTimerLoading ||
-                      hasActiveTimer ||
-                      !currentUserId ||
-                      !currentOrganizationId ||
-                      !task.project?._id ||
-                      !task._id
-                    }
-                    className="min-h-[36px] w-full sm:w-auto"
-                  >
-                    <Play className="h-4 w-4 mr-2" />
-                    Start Timer
-                  </Button>
-                  <Button
-                    variant="outline"
-                    disabled={!editAllowed}
-                    onClick={() => {
-                      if (!editAllowed) return
-                      router.push(`/tasks/${taskId}/edit`)
-                    }}
-                    className="min-h-[36px] w-full sm:w-auto"
-                  >
-                    <Edit className="h-4 w-4 mr-2" />
-                    Edit
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    disabled={!deleteAllowed}
-                    onClick={() => {
-                      if (!deleteAllowed) return
-                      setShowDeleteConfirmModal(true)
-                    }}
-                    className="min-h-[36px] w-full sm:w-auto"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
-                  </Button>
+                    <Button
+                      variant="destructive"
+                      disabled={!deleteAllowed}
+                      onClick={() => {
+                        if (!deleteAllowed) return
+                        setShowDeleteConfirmModal(true)
+                      }}
+                      className="min-h-[36px] w-full sm:w-auto"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-row items-stretch sm:items-center gap-2 flex-wrap justify-end">
+                    {isRelevantActiveTimer && (
+                      <Badge variant="outline" className="min-h-[36px] inline-flex items-center gap-2">
+                        <Clock className="h-4 w-4" />
+                        {activeTimerDisplay}
+                      </Badge>
+                    )}
+                    {isRelevantActiveTimer && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              onClick={handlePauseResumeTimer}
+                              disabled={stoppingTimer || !!timerActionLoading}
+                              size="icon"
+                              aria-label={
+                                Boolean((activeTimer as any)?.isPaused || (activeTimer as any)?.pausedAt)
+                                  ? 'Resume timer'
+                                  : 'Pause timer'
+                              }
+                            >
+                              {Boolean((activeTimer as any)?.isPaused || (activeTimer as any)?.pausedAt) ? (
+                                <Play className="h-4 w-4" />
+                              ) : (
+                                <Pause className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {Boolean((activeTimer as any)?.isPaused || (activeTimer as any)?.pausedAt)
+                              ? 'Resume'
+                              : 'Pause'}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    {isRelevantActiveTimer && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="destructive"
+                              onClick={() => setShowStopTimerConfirmModal(true)}
+                              disabled={stoppingTimer || !!timerActionLoading}
+                              size="icon"
+                              aria-label="Stop timer"
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Stop</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    <Button
+                      onClick={() => setShowStartTimerModal(true)}
+                      disabled={
+                        isActiveTimerLoading ||
+                        hasActiveTimer ||
+                        !currentUserId ||
+                        !currentOrganizationId ||
+                        !task.project?._id ||
+                        !task._id
+                      }
+                      className="min-h-[36px] w-full sm:w-auto"
+                    >
+                      <Play className="h-4 w-4 mr-2" />
+                      Start Timer
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2234,6 +2314,28 @@ export default function TaskDetailPage() {
           if (startedTimer) setActiveTimer(startedTimer)
           else loadActiveTimer()
         }}
+      />
+
+      <ConfirmationModal
+        isOpen={showStopTimerConfirmModal}
+        onClose={() => setShowStopTimerConfirmModal(false)}
+        onConfirm={async () => {
+          setShowStopTimerConfirmModal(false)
+          await handleStopTimer()
+        }}
+        title="Stop Timer"
+        description={
+          <>
+            Are you sure you want to stop the active timer?
+            <span className="block mt-2 text-foreground font-medium">
+              {task.project?.name || 'Unknown project'} • {task.title}
+            </span>
+          </>
+        }
+        confirmText="Stop Timer"
+        cancelText="Cancel"
+        variant="destructive"
+        isLoading={stoppingTimer}
       />
 
       {/* Delete Confirmation Modal */}

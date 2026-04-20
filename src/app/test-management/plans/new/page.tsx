@@ -133,7 +133,9 @@ export default function NewTestPlanPage() {
         <div className="space-y-6">
           <div>
             <h1 className="text-2xl font-bold">Create Test Plan</h1>
-            <p className="text-muted-foreground">Create a test plan and select test cases by suite.</p>
+            <p className="text-muted-foreground">
+              
+            </p>
           </div>
 
           <div className="space-y-2 max-w-xl">

@@ -3,6 +3,8 @@ import { connectDB } from '@/lib/db-config'
 import { TestCase, TestSuite, Project } from '@/models'
 // import { getServerSession } from 'next-auth'
 import { authenticateUser } from '@/lib/auth-utils'
+import { hasTestPermission } from '@/lib/permissions/test-permission-helper'
+import { Permission } from '@/lib/permissions/permission-definitions'
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,21 +25,26 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if user has access to all test cases
+    const userIdStr = authResult.user.id?.toString?.() || String(authResult.user.id)
+    const roleStr = (authResult.user.role || '').toString()
+    const hasRolePerm = await hasTestPermission(userIdStr, roleStr, Permission.TEST_CASE_UPDATE)
     const testCases = await TestCase.find({ _id: { $in: testCaseIds } })
     
-    for (const testCase of testCases) {
-      const project = await Project.findById(testCase.project)
-      const hasAccess = project && (
-        project.teamMembers.includes(authResult.user.id) || 
-        project.createdBy.toString() === authResult.user.id ||
-        project.projectRoles.some((role: any) => 
-          role.user.toString() === authResult.user.id && 
-          ['project_manager', 'project_qa_lead'].includes(role.role)
+    if (!hasRolePerm) {
+      for (const testCase of testCases) {
+        const project = await Project.findById(testCase.project)
+        const hasAccess = project && (
+          project.teamMembers.includes(authResult.user.id) || 
+          project.createdBy.toString() === authResult.user.id ||
+          project.projectRoles.some((role: any) => 
+            role.user.toString() === authResult.user.id && 
+            ['project_manager', 'project_qa_lead'].includes(role.role)
+          )
         )
-      )
 
-      if (!hasAccess) {
-        return NextResponse.json({ success: false, error: 'Access denied to one or more test cases' }, { status: 403 })
+        if (!hasAccess) {
+          return NextResponse.json({ success: false, error: 'Access denied to one or more test cases' }, { status: 403 })
+        }
       }
     }
 

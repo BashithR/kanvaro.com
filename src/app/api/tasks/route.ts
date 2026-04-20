@@ -13,6 +13,8 @@ import { cache, invalidateCache } from '@/lib/redis'
 import crypto from 'crypto'
 import { Counter } from '@/models/Counter'
 import { logTaskActivity } from '@/lib/task-activity-logger'
+import { logActivity } from '@/lib/activity-logger'
+import { countWords, TASK_TITLE_MAX_WORDS } from '@/lib/text/word-limit'
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -496,10 +498,19 @@ export async function POST(request: NextRequest) {
       isBillable
     } = payload
 
+    const normalizedTitle = typeof title === 'string' ? title.trim() : ''
+
     // Validate required fields first (fail fast)
-    if (!title || !project) {
+    if (!normalizedTitle || !project) {
       return NextResponse.json(
         { error: 'Title and project are required' },
+        { status: 400 }
+      )
+    }
+
+    if (countWords(normalizedTitle) > TASK_TITLE_MAX_WORDS) {
+      return NextResponse.json(
+        { error: `Title must be ${TASK_TITLE_MAX_WORDS} words or fewer` },
         { status: 400 }
       )
     }
@@ -583,7 +594,7 @@ export async function POST(request: NextRequest) {
     let task: any
     try {
       task = new Task({
-        title,
+        title: normalizedTitle,
         description,
         status: taskStatus,
         priority: priority || 'medium',
@@ -681,6 +692,45 @@ export async function POST(request: NextRequest) {
       newValue: task.status
     }).catch(err => console.error('Failed to log task creation activity:', err))
 
+    // Log activity to the organization-wide activity log (non-blocking)
+    logActivity({
+      organizationId: String(user.organization),
+      userId,
+      action: 'task_created',
+      entityType: 'task',
+      entityId: String(task._id),
+      entityName: normalizedTitle,
+      projectId: String(project),
+      projectName: projectDoc?.name || 'Unknown Project',
+      details: {
+        status: taskStatus,
+        priority: priority || 'medium',
+        type: type || 'task',
+        displayId
+      }
+    }).catch(err => console.error('Failed to log task created activity:', err))
+
+    // Log task assignments if any (non-blocking)
+    if (normalizedAssignedTo && normalizedAssignedTo.length > 0) {
+      normalizedAssignedTo.forEach(assignee => {
+        logActivity({
+          organizationId: String(user.organization),
+          userId,
+          action: 'task_assigned',
+          entityType: 'task',
+          entityId: String(task._id),
+          entityName: normalizedTitle,
+          projectId: String(project),
+          projectName: projectDoc?.name || 'Unknown Project',
+          details: {
+            assigneeId: assignee.user,
+            assigneeName: [assignee.firstName, assignee.lastName].filter(Boolean).join(' ') || undefined,
+            displayId
+          }
+        }).catch(err => console.error('Failed to log task assignment activity:', err))
+      })
+    }
+
     // Invalidate tasks cache for this organization (non-blocking)
     invalidateCache(`tasks:*:org:${user.organization}:*`).catch(err => {
       console.error('Failed to invalidate cache:', err)
@@ -772,7 +822,7 @@ export async function POST(request: NextRequest) {
           'assigned',
           assigneeId.user.toString(),
           user.organization,
-          title,
+          normalizedTitle,
           projectDoc?.name,
           baseUrl
         ).catch(notificationError => {
@@ -789,6 +839,30 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Create task error:', error)
+
+    if (error instanceof mongoose.Error.ValidationError) {
+      const firstMessage = Object.values(error.errors)?.[0]?.message
+      return NextResponse.json(
+        { error: firstMessage || 'Validation error' },
+        { status: 400 }
+      )
+    }
+
+    if (error instanceof mongoose.Error.CastError) {
+      return NextResponse.json(
+        { error: 'Invalid request data' },
+        { status: 400 }
+      )
+    }
+
+    // Duplicate key error (e.g., unique constraints)
+    if (typeof (error as any)?.code === 'number' && (error as any).code === 11000) {
+      return NextResponse.json(
+        { error: 'A record with these details already exists' },
+        { status: 409 }
+      )
+    }
+
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

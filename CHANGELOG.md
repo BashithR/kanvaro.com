@@ -1,3 +1,17 @@
+## [1.32.1](https://github.com/EchonLabs/kanvaro.com/compare/v1.32.0...v1.32.1) (2026-04-20)
+
+
+### Bug Fixes
+
+* enforce task title word limit and improve timer management in task detail page ([852ab18](https://github.com/EchonLabs/kanvaro.com/commit/852ab184ba95b0c5e7861b2f03abc70532b9494a))
+
+# [1.32.0](https://github.com/EchonLabs/kanvaro.com/compare/v1.31.1...v1.32.0) (2026-04-20)
+
+
+### Features
+
+* enhance time tracking widget with word truncation and improved task description display ([9fddfcd](https://github.com/EchonLabs/kanvaro.com/commit/9fddfcd265e63e1e6a9ce0abb694a92bc53fbbc0))
+
 ## [1.31.1](https://github.com/EchonLabs/kanvaro.com/compare/v1.31.0...v1.31.1) (2026-04-17)
 
 

@@ -11,7 +11,7 @@ function getRoleLabel(role: string): string {
         'super_admin': 'Admin',
         'admin': 'Admin',
         'human_resource': 'HR',
-        'project_manager': 'PM/ BA',
+        'project_manager': 'PM',
         'team_member': 'SE',
         'qa_engineer': 'QA',
         'tester': 'QA',

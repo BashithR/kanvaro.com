@@ -42,7 +42,8 @@ export class PermissionService {
       $or: [
         { teamMembers: user._id },
         { createdBy: user._id },
-        { client: user._id }
+        { client: user._id },
+        { 'projectRoles.user': user._id }
       ]
     });
 

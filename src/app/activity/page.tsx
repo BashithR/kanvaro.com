@@ -13,44 +13,92 @@ import { useDateTime } from '@/components/providers/DateTimeProvider'
 import {
   ArrowLeft,
   Search,
-  Filter,
   RefreshCw,
   Activity,
-  Users,
-  Calendar,
   CheckCircle,
   Plus,
-  MessageSquare,
   Timer,
   Clock,
+  Pause,
+  Play,
+  Edit,
+  FolderPlus,
+  FolderEdit,
+  Zap,
+  Target,
+  UserPlus,
+  ArrowRightLeft,
+  Save,
   X
 } from 'lucide-react'
 import { PageContent } from '@/components/ui/PageContent'
 
 interface ActivityItem {
   id: string
-  type: 'task' | 'project' | 'time'
   action: string
-  target: string
-  project: string
+  entityType: string
+  entityId: string | null
+  entityName: string
+  projectId: string | null
+  projectName: string
+  details: Record<string, any>
   user: {
     _id: string
     firstName: string
     lastName: string
     email: string
     avatar?: string
-  }
+  } | null
   timestamp: string
-  status?: string
-  duration?: number
 }
 
 interface ActivityFilters {
-  type: string
+  entityType: string
   action: string
   project: string
   user: string
   dateRange: string
+}
+
+const ACTION_CONFIG: Record<string, { icon: any; label: string; color: string }> = {
+  timer_started: { icon: Play, label: 'started timer', color: 'text-green-500' },
+  timer_stopped: { icon: Timer, label: 'stopped timer', color: 'text-red-500' },
+  timer_paused: { icon: Pause, label: 'paused timer', color: 'text-yellow-500' },
+  timer_resumed: { icon: Play, label: 'resumed timer', color: 'text-blue-500' },
+  time_entry_saved: { icon: Save, label: 'logged time', color: 'text-purple-500' },
+  time_entry_updated: { icon: Edit, label: 'updated time entry', color: 'text-purple-400' },
+  time_entry_deleted: { icon: X, label: 'deleted time entry', color: 'text-red-400' },
+  task_created: { icon: Plus, label: 'created task', color: 'text-blue-500' },
+  task_updated: { icon: Edit, label: 'updated task', color: 'text-orange-500' },
+  task_assigned: { icon: UserPlus, label: 'assigned task', color: 'text-indigo-500' },
+  task_status_changed: { icon: ArrowRightLeft, label: 'changed task status', color: 'text-cyan-500' },
+  project_created: { icon: FolderPlus, label: 'created project', color: 'text-emerald-500' },
+  project_updated: { icon: FolderEdit, label: 'updated project', color: 'text-teal-500' },
+  project_member_added: { icon: UserPlus, label: 'added member to project', color: 'text-emerald-400' },
+  project_member_removed: { icon: X, label: 'removed member from project', color: 'text-red-400' },
+  sprint_created: { icon: Zap, label: 'created sprint', color: 'text-violet-500' },
+  sprint_updated: { icon: Edit, label: 'updated sprint', color: 'text-violet-400' },
+  sprint_started: { icon: Play, label: 'started sprint', color: 'text-green-600' },
+  sprint_completed: { icon: CheckCircle, label: 'completed sprint', color: 'text-green-500' },
+  sprint_task_added: { icon: Plus, label: 'added task to sprint', color: 'text-blue-400' },
+  sprint_task_removed: { icon: X, label: 'removed task from sprint', color: 'text-red-400' },
+}
+
+const ENTITY_TYPE_LABELS: Record<string, string> = {
+  task: 'Task',
+  project: 'Project',
+  sprint: 'Sprint',
+  time_entry: 'Time Entry',
+  timer: 'Timer',
+}
+
+function formatDuration(minutes: number): string {
+  if (!minutes || minutes <= 0) return '0m'
+  const h = Math.floor(minutes / 60)
+  const m = Math.round(minutes % 60)
+  if (h > 0 && m > 0) return `${h}h ${m}m`
+  if (h > 0) return `${h}h`
+  return `${m}m`
 }
 
 export default function ActivityPage() {
@@ -62,63 +110,102 @@ export default function ActivityPage() {
   const [projectsLoading, setProjectsLoading] = useState(false)
   const [projectFilterQuery, setProjectFilterQuery] = useState('')
   const [filters, setFilters] = useState<ActivityFilters>({
-    type: 'all',
+    entityType: 'all',
     action: 'all',
     project: 'all',
     user: 'all',
     dateRange: 'all'
   })
   const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(10)
+  const [pageSize, setPageSize] = useState(20)
+  const [totalActivities, setTotalActivities] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
   const { formatDate } = useDateTime()
   const [user, setUser] = useState<any>(null)
   const [authError, setAuthError] = useState('')
   const [dataError, setDataError] = useState('')
   const router = useRouter()
 
-  const getActionIcon = (action: string) => {
-    if (action === 'completed') return CheckCircle
-    if (action === 'created' || action === 'started') return Plus
-    if (action === 'commented') return MessageSquare
-    if (action === 'logged') return Timer
-    return Clock
+  const getActionConfig = (action: string) => {
+    return ACTION_CONFIG[action] || { icon: Clock, label: action, color: 'text-muted-foreground' }
   }
 
   const formatTimestamp = (timestamp: string) => {
     const now = new Date()
     const activityTime = new Date(timestamp)
     const diffInMinutes = Math.floor((now.getTime() - activityTime.getTime()) / (1000 * 60))
-    
+
     if (diffInMinutes < 1) return 'Just now'
     if (diffInMinutes < 60) return `${diffInMinutes}m ago`
-    
+
     const diffInHours = Math.floor(diffInMinutes / 60)
     if (diffInHours < 24) return `${diffInHours}h ago`
-    
+
     const diffInDays = Math.floor(diffInHours / 24)
     if (diffInDays < 7) return `${diffInDays}d ago`
-    
+
     return formatDate(activityTime)
   }
 
-  const getActionText = (action: string) => {
-    switch (action) {
-      case 'completed': return 'completed'
-      case 'created': return 'created'
-      case 'started': return 'started'
-      case 'commented': return 'commented on'
-      case 'logged': return 'logged time for'
-      case 'updated': return 'updated'
-      default: return action
+  const getActivityDescription = (activity: ActivityItem): string => {
+    const details = activity.details || {}
+
+    switch (activity.action) {
+      case 'task_status_changed':
+        return `from "${details.oldStatus}" to "${details.newStatus}"`
+      case 'task_assigned':
+        return details.assigneeName ? `to ${details.assigneeName}` : ''
+      case 'timer_started':
+      case 'timer_paused':
+      case 'timer_resumed': {
+        const taskName = details.taskTitle || activity.entityName
+        return taskName ? `on "${taskName}"` : ''
+      }
+      case 'timer_stopped': {
+        const parts: string[] = []
+        const stopTaskName = details.taskTitle || activity.entityName
+        if (stopTaskName) parts.push(`on "${stopTaskName}"`)
+        if (details.duration) parts.push(`(${formatDuration(details.duration)})`)
+        return parts.join(' ')
+      }
+      case 'time_entry_saved': {
+        const entryParts: string[] = []
+        const entryTaskName = details.taskTitle || activity.entityName
+        if (entryTaskName) entryParts.push(`on "${entryTaskName}"`)
+        if (details.duration) entryParts.push(`— ${formatDuration(details.duration)}`)
+        return entryParts.join(' ')
+      }
+      case 'project_member_added':
+        return details.memberName ? `— ${details.memberName}` : ''
+      case 'project_member_removed':
+        return details.memberName ? `— ${details.memberName}` : ''
+      case 'sprint_started':
+      case 'sprint_completed':
+        return ''
+      default:
+        return ''
     }
   }
 
   const loadActivities = useCallback(async () => {
     try {
-      const response = await fetch('/api/activity')
+      const params = new URLSearchParams()
+      params.set('page', String(currentPage))
+      params.set('limit', String(pageSize))
+
+      if (filters.entityType !== 'all') params.set('entityType', filters.entityType)
+      if (filters.action !== 'all') params.set('action', filters.action)
+      if (filters.project !== 'all') params.set('project', filters.project)
+      if (filters.user !== 'all') params.set('user', filters.user)
+      if (filters.dateRange !== 'all') params.set('dateRange', filters.dateRange)
+      if (searchTerm) params.set('search', searchTerm)
+
+      const response = await fetch(`/api/activity?${params.toString()}`)
       if (response.ok) {
         const data = await response.json()
         setActivities(data.activities || [])
+        setTotalActivities(data.pagination?.total || 0)
+        setTotalPages(data.pagination?.totalPages || 1)
         setDataError('')
       } else {
         setDataError('Failed to load activity data')
@@ -127,27 +214,25 @@ export default function ActivityPage() {
       console.error('Failed to load activity data:', error)
       setDataError('Failed to load activity data')
     }
-  }, [])
+  }, [currentPage, pageSize, filters, searchTerm])
 
   const checkAuth = useCallback(async () => {
     try {
       const response = await fetch('/api/auth/me')
-      
+
       if (response.ok) {
         const userData = await response.json()
         setUser(userData)
         setAuthError('')
-        await loadActivities()
       } else if (response.status === 401) {
         const refreshResponse = await fetch('/api/auth/refresh', {
           method: 'POST'
         })
-        
+
         if (refreshResponse.ok) {
           const refreshData = await refreshResponse.json()
           setUser(refreshData.user)
           setAuthError('')
-          await loadActivities()
         } else {
           setAuthError('Session expired')
           setTimeout(() => {
@@ -166,7 +251,7 @@ export default function ActivityPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [router, loadActivities])
+  }, [router])
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
@@ -181,11 +266,18 @@ export default function ActivityPage() {
     checkAuth()
   }, [checkAuth])
 
+  // Load activities when auth is ready or filters change
+  useEffect(() => {
+    if (user) {
+      loadActivities()
+    }
+  }, [user, loadActivities])
+
   useEffect(() => {
     setCurrentPage(1)
   }, [
     searchTerm,
-    filters.type,
+    filters.entityType,
     filters.action,
     filters.project,
     filters.user,
@@ -219,66 +311,8 @@ export default function ActivityPage() {
     return projects.filter((project) => project.name.toLowerCase().includes(query))
   }, [projects, projectFilterQuery])
 
-  // Filter activities based on search and filters
-  const filteredActivities = useMemo(() => {
-    return activities.filter(activity => {
-      const matchesSearch = searchTerm === '' ||
-        activity.target.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        activity.project.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        `${activity.user.firstName} ${activity.user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
-
-      const matchesType = filters.type === 'all' || activity.type === filters.type
-      const matchesAction = filters.action === 'all' || activity.action === filters.action
-      const matchesProject = filters.project === 'all' || activity.project === filters.project
-      const matchesUser = filters.user === 'all' || activity.user._id === filters.user
-
-      // Date range filtering
-      const matchesDateRange = (() => {
-        if (filters.dateRange === 'all') return true
-
-        const activityDate = new Date(activity.timestamp)
-        const now = new Date()
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-
-        switch (filters.dateRange) {
-          case 'today':
-            return activityDate >= today
-          case 'week':
-            const weekAgo = new Date(today)
-            weekAgo.setDate(today.getDate() - 7)
-            return activityDate >= weekAgo
-          case 'month':
-            const monthAgo = new Date(today)
-            monthAgo.setMonth(today.getMonth() - 1)
-            return activityDate >= monthAgo
-          default:
-            return true
-        }
-      })()
-
-      return matchesSearch && matchesType && matchesAction && matchesProject && matchesUser && matchesDateRange
-    })
-  }, [activities, searchTerm, filters])
-
-  useEffect(() => {
-    const totalPagesForData = filteredActivities.length === 0
-      ? 1
-      : Math.max(1, Math.ceil(filteredActivities.length / pageSize))
-
-    if (currentPage > totalPagesForData) {
-      setCurrentPage(totalPagesForData)
-    }
-  }, [filteredActivities.length, pageSize, currentPage])
-
-  const totalActivitiesCount = filteredActivities.length
-  const totalPages = Math.max(1, Math.ceil((totalActivitiesCount || 0) / pageSize) || 1)
-  const pageStartIndex = totalActivitiesCount === 0 ? 0 : ((currentPage - 1) * pageSize) + 1
-  const pageEndIndex = totalActivitiesCount === 0 ? 0 : Math.min(currentPage * pageSize, totalActivitiesCount)
-
-  const paginatedActivities = useMemo(() => {
-    const startIndex = (currentPage - 1) * pageSize
-    return filteredActivities.slice(startIndex, startIndex + pageSize)
-  }, [filteredActivities, currentPage, pageSize])
+  const pageStartIndex = totalActivities === 0 ? 0 : ((currentPage - 1) * pageSize) + 1
+  const pageEndIndex = totalActivities === 0 ? 0 : Math.min(currentPage * pageSize, totalActivities)
 
   if (isLoading) {
     return (
@@ -381,7 +415,7 @@ export default function ActivityPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Type</label>
-                  <Select value={filters.type} onValueChange={(value) => setFilters(prev => ({ ...prev, type: value }))}>
+                  <Select value={filters.entityType} onValueChange={(value) => setFilters(prev => ({ ...prev, entityType: value }))}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -389,7 +423,9 @@ export default function ActivityPage() {
                       <SelectItem value="all">All Types</SelectItem>
                       <SelectItem value="task">Tasks</SelectItem>
                       <SelectItem value="project">Projects</SelectItem>
-                      <SelectItem value="time">Time Tracking</SelectItem>
+                      <SelectItem value="sprint">Sprints</SelectItem>
+                      <SelectItem value="timer">Timer</SelectItem>
+                      <SelectItem value="time_entry">Time Entries</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -402,10 +438,20 @@ export default function ActivityPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Actions</SelectItem>
-                      <SelectItem value="created">Created</SelectItem>
-                      <SelectItem value="updated">Updated</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                      <SelectItem value="logged">Time Logged</SelectItem>
+                      <SelectItem value="task_created">Task Created</SelectItem>
+                      <SelectItem value="task_updated">Task Updated</SelectItem>
+                      <SelectItem value="task_assigned">Task Assigned</SelectItem>
+                      <SelectItem value="task_status_changed">Status Changed</SelectItem>
+                      <SelectItem value="project_created">Project Created</SelectItem>
+                      <SelectItem value="project_updated">Project Updated</SelectItem>
+                      <SelectItem value="project_member_added">Member Added</SelectItem>
+                      <SelectItem value="project_member_removed">Member Removed</SelectItem>
+                      <SelectItem value="sprint_created">Sprint Created</SelectItem>
+                      <SelectItem value="sprint_started">Sprint Started</SelectItem>
+                      <SelectItem value="sprint_completed">Sprint Completed</SelectItem>
+                      <SelectItem value="timer_started">Timer Started</SelectItem>
+                      <SelectItem value="timer_stopped">Timer Stopped</SelectItem>
+                      <SelectItem value="time_entry_saved">Time Logged</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -455,7 +501,7 @@ export default function ActivityPage() {
                             )
                           ) : (
                             filteredProjectOptions.map((p) => (
-                              <SelectItem key={p._id} value={p.name}>{p.name}</SelectItem>
+                              <SelectItem key={p._id} value={p._id}>{p.name}</SelectItem>
                             ))
                           )}
                         </div>
@@ -488,19 +534,19 @@ export default function ActivityPage() {
               <div className="flex items-center justify-between">
                 <CardTitle>Recent Activities</CardTitle>
                 <Badge variant="secondary">
-                  {totalActivitiesCount} activities
+                  {totalActivities} activities
                 </Badge>
               </div>
             </CardHeader>
             <CardContent>
-              {totalActivitiesCount === 0 ? (
+              {totalActivities === 0 ? (
                 <div className="text-center py-12">
                   <div className="p-4 bg-muted/50 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
                     <Activity className="h-8 w-8 text-muted-foreground" />
                   </div>
                   <h3 className="text-lg font-semibold mb-2">No activities found</h3>
                   <p className="text-muted-foreground mb-6">
-                    {searchTerm || Object.values(filters).some(f => f !== 'all') 
+                    {searchTerm || Object.values(filters).some(f => f !== 'all')
                       ? 'Try adjusting your search or filters'
                       : 'Team activity will appear here as members work on projects and tasks.'
                     }
@@ -511,7 +557,7 @@ export default function ActivityPage() {
                       onClick={() => {
                         setSearchTerm('')
                         setFilters({
-                          type: 'all',
+                          entityType: 'all',
                           action: 'all',
                           project: 'all',
                           user: 'all',
@@ -525,56 +571,80 @@ export default function ActivityPage() {
                 </div>
               ) : (
                 <>
-                  <div className="space-y-8">
-                    {paginatedActivities.map((activity) => {
-                      const ActionIcon = getActionIcon(activity.action)
-                      
+                  <div className="space-y-4">
+                    {activities.map((activity) => {
+                      const config = getActionConfig(activity.action)
+                      const ActionIcon = config.icon
+                      const description = getActivityDescription(activity)
+
                       return (
-                        <div 
-                          key={activity.id} 
-                          className="flex items-center space-x-4 p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                        <div
+                          key={activity.id}
+                          className="flex items-start space-x-4 p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                         >
-                          <div className="relative">
-                            <GravatarAvatar 
-                              user={{
-                                avatar: activity.user.avatar,
-                                firstName: activity.user.firstName,
-                                lastName: activity.user.lastName,
-                                email: activity.user.email
-                              }}
-                              size={40}
-                              className="h-10 w-10"
-                            />
-                            <div className="absolute -bottom-1 -right-1 p-1 bg-background border border-border rounded-full">
-                              <ActionIcon className="h-3 w-3 text-muted-foreground" />
+                          <div className="relative flex-shrink-0">
+                            {activity.user ? (
+                              <GravatarAvatar
+                                user={{
+                                  avatar: activity.user.avatar,
+                                  firstName: activity.user.firstName,
+                                  lastName: activity.user.lastName,
+                                  email: activity.user.email
+                                }}
+                                size={40}
+                                className="h-10 w-10"
+                              />
+                            ) : (
+                              <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                                <Activity className="h-5 w-5 text-muted-foreground" />
+                              </div>
+                            )}
+                            <div className={`absolute -bottom-1 -right-1 p-1 bg-background border border-border rounded-full ${config.color}`}>
+                              <ActionIcon className="h-3 w-3" />
                             </div>
                           </div>
-                          
+
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center space-x-2 mb-1">
+                            <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 mb-1">
                               <span className="font-semibold text-foreground">
-                                {activity.user.firstName} {activity.user.lastName}
+                                {activity.user ? `${activity.user.firstName} ${activity.user.lastName}` : 'System'}
                               </span>
-                              <span className="text-sm text-muted-foreground">
-                                {getActionText(activity.action)}
+                              <span className={`text-sm font-medium ${config.color}`}>
+                                {config.label}
                               </span>
+                              {description && (
+                                <span className="text-sm text-muted-foreground">
+                                  {description}
+                                </span>
+                              )}
                             </div>
-                            
-                            <p className="text-sm text-muted-foreground mb-2">
-                              {activity.target}
-                            </p>
-                            
-                            <div className="flex items-center space-x-4 text-xs text-muted-foreground">
-                              <Badge variant="outline" className="text-xs">
-                                {activity.type}
+
+                            {activity.entityName && !['timer_started', 'timer_stopped', 'timer_paused', 'timer_resumed'].includes(activity.action) && (
+                              <p className="text-sm text-foreground/80 mb-1.5 font-medium truncate">
+                                {activity.details?.displayId ? `${activity.details.displayId} — ` : ''}
+                                {activity.entityName}
+                              </p>
+                            )}
+
+                            <div className="flex items-center flex-wrap gap-2 text-xs text-muted-foreground">
+                              <Badge variant="outline" className="text-xs capitalize">
+                                {ENTITY_TYPE_LABELS[activity.entityType] || activity.entityType}
                               </Badge>
-                              <span>{activity.project}</span>
+                              {activity.projectName && (
+                                <span>{activity.projectName}</span>
+                              )}
                               <span>•</span>
                               <span>{formatTimestamp(activity.timestamp)}</span>
-                              {activity.duration && (
+                              {activity.action === 'timer_stopped' && activity.details?.duration && (
                                 <>
                                   <span>•</span>
-                                  <span>{activity.duration} minutes</span>
+                                  <span className="font-medium">{formatDuration(activity.details.duration)}</span>
+                                </>
+                              )}
+                              {activity.action === 'time_entry_saved' && activity.details?.duration && (
+                                <>
+                                  <span>•</span>
+                                  <span className="font-medium">{formatDuration(activity.details.duration)}</span>
                                 </>
                               )}
                             </div>
@@ -605,7 +675,7 @@ export default function ActivityPage() {
                         </SelectContent>
                       </Select>
                       <span>
-                        Showing {pageStartIndex} to {pageEndIndex} of {totalActivitiesCount}
+                        Showing {pageStartIndex} to {pageEndIndex} of {totalActivities}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">

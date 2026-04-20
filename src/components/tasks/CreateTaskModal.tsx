@@ -23,6 +23,7 @@ import {
 import { RichTextEditor } from '@/components/ui/RichTextEditor'
 import { AttachmentList } from '@/components/ui/AttachmentList'
 import { useNotify } from '@/lib/notify'
+import { TASK_TITLE_MAX_WORDS, countWords, truncateToMaxWords } from '@/lib/text/word-limit'
 
 interface CreateTaskModalProps {
   isOpen: boolean
@@ -168,11 +169,33 @@ export default function CreateTaskModal({
     epic: '',
     isBillable: false
   })
+  const [titleWordLimitMessage, setTitleWordLimitMessage] = useState('')
+  const [titleWordLimitIsError, setTitleWordLimitIsError] = useState(false)
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([])
   const [attachmentError, setAttachmentError] = useState('')
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false)
   const attachmentInputRef = useRef<HTMLInputElement>(null)
+
+  const titleWordCount = useMemo(() => countWords(formData.title), [formData.title])
+
+  const handleTitleChange = useCallback((nextValue: string) => {
+    const attemptedWordCount = countWords(nextValue)
+    const truncated = truncateToMaxWords(nextValue, TASK_TITLE_MAX_WORDS)
+
+    if (attemptedWordCount > TASK_TITLE_MAX_WORDS) {
+      setTitleWordLimitMessage(`Maximum ${TASK_TITLE_MAX_WORDS} words. Extra words won\'t be added.`)
+      setTitleWordLimitIsError(true)
+    } else if (countWords(truncated) >= TASK_TITLE_MAX_WORDS) {
+      setTitleWordLimitMessage(`Word limit reached (${TASK_TITLE_MAX_WORDS} words).`)
+      setTitleWordLimitIsError(false)
+    } else {
+      setTitleWordLimitMessage('')
+      setTitleWordLimitIsError(false)
+    }
+
+    setFormData(prev => ({ ...prev, title: truncated }))
+  }, [])
 
   const effectiveProjectId = projectId || selectedProjectId
   const hasProjectSelected = Boolean(effectiveProjectId)
@@ -350,6 +373,8 @@ export default function CreateTaskModal({
         epic: '',
         isBillable: false
       })
+      setTitleWordLimitMessage('')
+      setTitleWordLimitIsError(false)
       setSubtasks([])
       setAssignedTo([])
       setAssigneeHourlyRates({})
@@ -487,6 +512,14 @@ export default function CreateTaskModal({
     e.preventDefault()
     setLoading(true)
     setError('')
+
+    if (countWords(formData.title) > TASK_TITLE_MAX_WORDS) {
+      const message = `Task title must be ${TASK_TITLE_MAX_WORDS} words or fewer.`
+      notifyError({ title: 'Validation Error', message })
+      setError(message)
+      setLoading(false)
+      return
+    }
     // Validate required fields including subtasks titles
     const missingSubtaskTitle = subtasks.some(st => !(st.title && st.title.trim().length > 0))
     const missingDueDate = !(formData.dueDate && formData.dueDate.trim().length > 0)
@@ -718,11 +751,19 @@ export default function CreateTaskModal({
                 <label className="text-sm font-medium text-foreground">Task Title *</label>
                 <Input
                   value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  onChange={(e) => handleTitleChange(e.target.value)}
                   placeholder="Enter task title"
                   className="mt-1"
                   required
                 />
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <p className={`text-xs ${titleWordCount >= TASK_TITLE_MAX_WORDS ? 'text-red-600' : 'text-muted-foreground'}`}>
+                    {titleWordCount}/{TASK_TITLE_MAX_WORDS} words
+                  </p>
+                  {titleWordLimitMessage && (
+                    <p className={`text-xs ${titleWordLimitIsError ? 'text-red-600' : 'text-muted-foreground'}`}>{titleWordLimitMessage}</p>
+                  )}
+                </div>
               </div>
 
               <div className="md:col-span-2">
