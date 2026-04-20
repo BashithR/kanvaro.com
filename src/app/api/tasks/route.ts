@@ -13,6 +13,7 @@ import { cache, invalidateCache } from '@/lib/redis'
 import crypto from 'crypto'
 import { Counter } from '@/models/Counter'
 import { logTaskActivity } from '@/lib/task-activity-logger'
+import { logActivity } from '@/lib/activity-logger'
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -680,6 +681,45 @@ export async function POST(request: NextRequest) {
       action: 'created',
       newValue: task.status
     }).catch(err => console.error('Failed to log task creation activity:', err))
+
+    // Log activity to the organization-wide activity log (non-blocking)
+    logActivity({
+      organizationId: String(user.organization),
+      userId,
+      action: 'task_created',
+      entityType: 'task',
+      entityId: String(task._id),
+      entityName: title,
+      projectId: String(project),
+      projectName: projectDoc?.name || 'Unknown Project',
+      details: {
+        status: taskStatus,
+        priority: priority || 'medium',
+        type: type || 'task',
+        displayId
+      }
+    }).catch(err => console.error('Failed to log task created activity:', err))
+
+    // Log task assignments if any (non-blocking)
+    if (normalizedAssignedTo && normalizedAssignedTo.length > 0) {
+      normalizedAssignedTo.forEach(assignee => {
+        logActivity({
+          organizationId: String(user.organization),
+          userId,
+          action: 'task_assigned',
+          entityType: 'task',
+          entityId: String(task._id),
+          entityName: title,
+          projectId: String(project),
+          projectName: projectDoc?.name || 'Unknown Project',
+          details: {
+            assigneeId: assignee.user,
+            assigneeName: [assignee.firstName, assignee.lastName].filter(Boolean).join(' ') || undefined,
+            displayId
+          }
+        }).catch(err => console.error('Failed to log task assignment activity:', err))
+      })
+    }
 
     // Invalidate tasks cache for this organization (non-blocking)
     invalidateCache(`tasks:*:org:${user.organization}:*`).catch(err => {

@@ -8,6 +8,7 @@ import { authenticateUser } from '@/lib/auth-utils'
 import { PermissionService } from '@/lib/permissions/permission-service'
 import { Permission } from '@/lib/permissions/permission-definitions'
 import { EmailService } from '@/lib/email/EmailService'
+import { logActivity } from '@/lib/activity-logger'
 
 // Helper function to send sprint assignment email to team members
 async function sendSprintAssignmentEmails(
@@ -479,6 +480,28 @@ export async function POST(request: NextRequest) {
         ).catch(err => console.error('Background email sending failed:', err))
       }
     }
+
+    // Log activity: sprint created (non-blocking)
+    const sprintProjectName = populatedSprint?.project?.name || 'Unknown Project'
+    const sprintProjectId = typeof populatedSprint?.project === 'object' && populatedSprint?.project?._id
+      ? String(populatedSprint.project._id)
+      : String(project)
+    logActivity({
+      organizationId: String(organizationId),
+      userId: String(userId),
+      action: 'sprint_created',
+      entityType: 'sprint',
+      entityId: String(sprint._id),
+      entityName: name,
+      projectId: sprintProjectId,
+      projectName: sprintProjectName,
+      details: {
+        startDate,
+        endDate,
+        goal: goal || undefined,
+        teamMemberCount: teamMembers?.length || 0
+      }
+    }).catch(err => console.error('Failed to log sprint creation activity:', err))
 
     return NextResponse.json({
       success: true,

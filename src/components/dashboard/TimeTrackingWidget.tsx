@@ -64,6 +64,14 @@ export function TimeTrackingWidget({ userId, organizationId, timeStats: propTime
   const tickStartMsRef = useRef<number | null>(null)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
+  const truncateWords = (text: string, maxWords: number) => {
+    const trimmed = (text || '').trim()
+    if (!trimmed) return ''
+    const words = trimmed.split(/\s+/)
+    if (words.length <= maxWords) return trimmed
+    return `${words.slice(0, maxWords).join(' ')}…`
+  }
+
   const loadActiveTimer = useCallback(async () => {
     try {
       const response = await fetch(`/api/time-tracking/timer?userId=${userId}&organizationId=${organizationId}`)
@@ -301,7 +309,9 @@ export function TimeTrackingWidget({ userId, organizationId, timeStats: propTime
               {activeTimer.task && (
                 <div className="text-xs break-words">
                   <span className="font-semibold text-foreground">Task:</span>{' '}
-                  <span className="truncate">{activeTimer.task.title}</span>
+                  <span className="break-words whitespace-normal" title={activeTimer.task.title}>
+                    {activeTimer.task.title}
+                  </span>
                 </div>
               )}
               {activeTimer.description && (
@@ -310,8 +320,8 @@ export function TimeTrackingWidget({ userId, organizationId, timeStats: propTime
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span className="line-clamp-1">
-                          {activeTimer.description}
+                        <span className="break-words whitespace-normal" title={activeTimer.description}>
+                          {truncateWords(activeTimer.description, 5)}
                         </span>
                       </TooltipTrigger>
                       <TooltipContent>

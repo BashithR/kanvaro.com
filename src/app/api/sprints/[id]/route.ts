@@ -6,6 +6,7 @@ import { Project } from '@/models/Project'
 import { authenticateUser } from '@/lib/auth-utils'
 import { PermissionService } from '@/lib/permissions/permission-service'
 import { Permission } from '@/lib/permissions/permission-definitions'
+import { logActivity } from '@/lib/activity-logger'
 
 export async function GET(
   request: NextRequest,
@@ -277,6 +278,76 @@ export async function PUT(
         { error: 'Sprint not found or unauthorized' },
         { status: 404 }
       )
+    }
+
+    // Log activity: sprint updated (non-blocking)
+    const sprintProjectName = (typeof sprint.project === 'object' && sprint.project !== null && 'name' in sprint.project)
+      ? (sprint.project as any).name
+      : 'Unknown Project'
+    const logProjectId = (typeof sprint.project === 'object' && sprint.project !== null && '_id' in sprint.project)
+      ? String((sprint.project as any)._id)
+      : sprint.project ? String(sprint.project) : undefined
+
+    // Determine specific action based on status changes
+    let sprintAction: 'sprint_updated' | 'sprint_started' | 'sprint_completed' = 'sprint_updated'
+    if (updateData.status) {
+      if (updateData.status === 'active' && existingSprint.status !== 'active') {
+        sprintAction = 'sprint_started'
+      } else if (updateData.status === 'completed' && existingSprint.status !== 'completed') {
+        sprintAction = 'sprint_completed'
+      }
+    }
+
+    logActivity({
+      organizationId: String(organizationId),
+      userId: String(userId),
+      action: sprintAction,
+      entityType: 'sprint',
+      entityId: String(sprintId),
+      entityName: sprint.name,
+      projectId: logProjectId,
+      projectName: sprintProjectName,
+      details: {
+        changedFields: Object.keys(updateData),
+        oldStatus: existingSprint.status,
+        newStatus: updateData.status || existingSprint.status
+      }
+    }).catch(err => console.error('Failed to log sprint update activity:', err))
+
+    // Log task additions/removals if tasks array changed
+    if (updateData.tasks && Array.isArray(updateData.tasks)) {
+      const oldTaskIds = (existingSprint.tasks || []).map((t: any) => String(t))
+      const newTaskIds = updateData.tasks.map((t: any) => String(t))
+      const addedTasks = newTaskIds.filter((id: string) => !oldTaskIds.includes(id))
+      const removedTasks = oldTaskIds.filter((id: string) => !newTaskIds.includes(id))
+
+      addedTasks.forEach((taskId: string) => {
+        logActivity({
+          organizationId: String(organizationId),
+          userId: String(userId),
+          action: 'sprint_task_added',
+          entityType: 'sprint',
+          entityId: String(sprintId),
+          entityName: sprint.name,
+          projectId: logProjectId,
+          projectName: sprintProjectName,
+          details: { taskId }
+        }).catch(err => console.error('Failed to log sprint task add activity:', err))
+      })
+
+      removedTasks.forEach((taskId: string) => {
+        logActivity({
+          organizationId: String(organizationId),
+          userId: String(userId),
+          action: 'sprint_task_removed',
+          entityType: 'sprint',
+          entityId: String(sprintId),
+          entityName: sprint.name,
+          projectId: logProjectId,
+          projectName: sprintProjectName,
+          details: { taskId }
+        }).catch(err => console.error('Failed to log sprint task remove activity:', err))
+      })
     }
 
     return NextResponse.json({

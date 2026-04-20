@@ -13,6 +13,7 @@ import { Permission } from '@/lib/permissions/permission-definitions'
 import { PermissionService } from '@/lib/permissions/permission-service'
 
 import mongoose from 'mongoose'
+import { logActivity } from '@/lib/activity-logger'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key'
@@ -581,6 +582,25 @@ export async function POST(request: NextRequest) {
     })
 
     await timeEntry.save()
+
+    // Log activity: time entry saved (non-blocking)
+    const projectForLog = await Project.findById(projectId).select('name').lean()
+    const taskForLog = taskId ? await Task.findById(taskId).select('title').lean() : null
+    logActivity({
+      organizationId: String(organizationId),
+      userId: String(userId),
+      action: 'time_entry_saved',
+      entityType: 'time_entry',
+      entityId: String(timeEntry._id),
+      entityName: (taskForLog as any)?.title || finalDescription || 'Time Entry',
+      projectId: String(projectId),
+      projectName: (projectForLog as any)?.name || 'Unknown Project',
+      details: {
+        duration: finalDuration,
+        description: finalDescription,
+        taskTitle: (taskForLog as any)?.title
+      }
+    }).catch(err => console.error('Failed to log time entry activity:', err))
 
     return NextResponse.json({
       message: 'Time entry created successfully',
