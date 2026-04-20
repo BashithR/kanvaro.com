@@ -113,8 +113,7 @@ const TaskSchema = new Schema<ITask>({
   title: {
     type: String,
     required: true,
-    trim: true,
-    maxlength: 200
+    trim: true
   },
   description: {
     type: String,

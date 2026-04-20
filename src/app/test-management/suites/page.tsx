@@ -28,6 +28,9 @@ export default function TestSuitesPage() {
   const searchParams = useSearchParams()
   const { success: notifySuccess } = useNotify()
   const [selectedProject, setSelectedProject] = useState<string>('')
+  // Project selection inside the create/edit dialog.
+  // This is intentionally NOT persisted as the default for the next create flow.
+  const [suiteDialogProjectId, setSuiteDialogProjectId] = useState<string>('')
   const [highlightSuiteId, setHighlightSuiteId] = useState<string | null>(null)
   const [testSuiteDialogOpen, setTestSuiteDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -62,11 +65,13 @@ export default function TestSuitesPage() {
 
   const handleCreateTestSuite = () => {
     setSelectedTestSuite(null)
+    setSuiteDialogProjectId('')
     setTestSuiteDialogOpen(true)
   }
 
   const handleEditTestSuite = (testSuite: TestSuite) => {
     setSelectedTestSuite(testSuite)
+    setSuiteDialogProjectId(testSuite.project)
     setTestSuiteDialogOpen(true)
   }
 
@@ -75,11 +80,13 @@ export default function TestSuitesPage() {
     setDeleteDialogOpen(true)
   }
 
-  const handleSaveTestSuite = async (testSuiteData: any) => {
+  const handleSaveTestSuite = async (testSuiteData: TestSuite) => {
     setSaving(true)
     try {
       const isEdit = !!selectedTestSuite?._id
-      const projectIdToUse = isEdit ? (selectedTestSuite?.project || selectedProject) : selectedProject
+      const projectIdToUse = isEdit
+        ? (selectedTestSuite?.project || testSuiteData.project || selectedProject)
+        : (testSuiteData.project || suiteDialogProjectId)
       const response = await fetch('/api/test-suites', {
         method: isEdit ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -96,6 +103,11 @@ export default function TestSuitesPage() {
         notifySuccess({ title: isEdit ? 'Test Suite updated successfully.' : 'Test Suite created successfully.' })
         setTestSuiteDialogOpen(false)
         setSelectedTestSuite(null)
+        setSuiteDialogProjectId('')
+        // Keep the list scoped to the last successfully used project.
+        if (projectIdToUse && projectIdToUse !== selectedProject) {
+          setSelectedProject(projectIdToUse)
+        }
         setRefreshCounter(c => c + 1)
         if (detailSuiteId) {
           setSuiteDetailRefreshKey(k => k + 1)
@@ -166,6 +178,7 @@ export default function TestSuitesPage() {
               onSuiteDelete={handleDeleteTestSuite}
               onSuiteCreate={() => {
                 setSelectedTestSuite(null)
+                setSuiteDialogProjectId('')
                 setTestSuiteDialogOpen(true)
               }}
             />
@@ -174,7 +187,13 @@ export default function TestSuitesPage() {
           {/* Dialogs */}
           <ResponsiveDialog
             open={testSuiteDialogOpen}
-            onOpenChange={setTestSuiteDialogOpen}
+            onOpenChange={(open) => {
+              setTestSuiteDialogOpen(open)
+              if (!open) {
+                setSelectedTestSuite(null)
+                setSuiteDialogProjectId('')
+              }
+            }}
             title={selectedTestSuite ? 'Edit Test Suite' : 'Create Test Suite'}
             dismissible={false}
             footer={
@@ -185,6 +204,7 @@ export default function TestSuitesPage() {
                   onClick={() => {
                     setTestSuiteDialogOpen(false)
                     setSelectedTestSuite(null)
+                    setSuiteDialogProjectId('')
                   }}
                 >
                   Cancel
@@ -201,13 +221,14 @@ export default function TestSuitesPage() {
           >
             <TestSuiteForm
               testSuite={selectedTestSuite || undefined}
-              projectId={selectedTestSuite?.project || selectedProject}
+              projectId={selectedTestSuite?.project || suiteDialogProjectId}
               showProjectSelector={true}
-              onProjectChange={(newProjectId) => setSelectedProject(newProjectId)}
+              onProjectChange={(newProjectId) => setSuiteDialogProjectId(newProjectId)}
               onSave={handleSaveTestSuite}
               onCancel={() => {
                 setTestSuiteDialogOpen(false)
                 setSelectedTestSuite(null)
+                setSuiteDialogProjectId('')
                 if (detailSuiteId) {
                   setSuiteDetailDialogOpen(true)
                 }
@@ -239,6 +260,7 @@ export default function TestSuitesPage() {
             onCreateChild={(parentSuiteId) => {
               setSuiteDetailDialogOpen(false)
               setSelectedTestSuite(null)
+              setSuiteDialogProjectId('')
               setTestSuiteDialogOpen(true)
             }}
             onChildSuiteClick={(childSuiteId) => {

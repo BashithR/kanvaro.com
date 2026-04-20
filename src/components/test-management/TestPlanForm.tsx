@@ -298,18 +298,31 @@ export function TestPlanForm({ testPlan, projectId, onSave, onCancel, loading = 
     return true
   })
 
-  const testCaseSuites = (() => {
-    const suiteIds = Array.from(new Set(filteredTestCases.map(getTestSuiteId)))
-    suiteIds.sort((a, b) => getTestSuiteName(a).localeCompare(getTestSuiteName(b)))
-    return suiteIds
+  const suiteIdsToRender = (() => {
+    // Primary: suites belonging to the selected project (show even if empty)
+    const orderedFromSuites = testSuites.map((s) => s._id)
+
+    // Fallback/extra: suites inferred from test case payload (handles stale/populated data)
+    const extraFromCases = Array.from(new Set(filteredTestCases.map(getTestSuiteId)))
+      .filter((id) => id && id !== 'unspecified' && !orderedFromSuites.includes(id))
+      .sort((a, b) => getTestSuiteName(a).localeCompare(getTestSuiteName(b)))
+
+    const ids = [...orderedFromSuites, ...extraFromCases]
+
+    // If we ever have unassigned cases, show a dedicated group.
+    const hasUnassigned = filteredTestCases.some((tc) => getTestSuiteId(tc) === 'unspecified')
+    if (hasUnassigned) ids.push('unspecified')
+
+    // Ensure uniqueness without reordering.
+    return ids.filter((id, idx) => ids.indexOf(id) === idx)
   })()
 
-  const testCaseSuitesKey = testCaseSuites.join('|')
+  const suiteIdsToRenderKey = suiteIdsToRender.join('|')
 
   useEffect(() => {
     // Keep suites expanded by default when list changes (new project, filters, etc.)
-    setExpandedSuites(new Set(testCaseSuites))
-  }, [testCaseSuitesKey])
+    setExpandedSuites(new Set(suiteIdsToRender))
+  }, [suiteIdsToRenderKey])
 
   const addTag = () => {
     if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
@@ -495,23 +508,22 @@ export function TestPlanForm({ testPlan, projectId, onSave, onCancel, loading = 
             </div>
 
             <div className="border rounded-lg p-4 max-h-[420px] overflow-y-auto space-y-3">
-              {testCases.length === 0 ? (
+              {testSuites.length === 0 && testCases.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  No test cases available for this project
+                  No test suites available for this project
                 </p>
-              ) : filteredTestCases.length === 0 ? (
+              ) : filteredTestCases.length === 0 && testCases.length > 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   No matching test cases
                 </p>
               ) : (
                 <div className="space-y-3">
-                  {testCaseSuites.map((suiteId) => {
+                  {suiteIdsToRender.map((suiteId) => {
                     const suiteName = getTestSuiteName(suiteId)
                     const suiteTestCases = filteredTestCases.filter(tc => getTestSuiteId(tc) === suiteId)
-                    if (suiteTestCases.length === 0) return null
 
                     const selectedCount = suiteTestCases.filter(tc => formData.testCases.includes(tc._id)).length
-                    const allSelected = selectedCount === suiteTestCases.length
+                    const allSelected = suiteTestCases.length > 0 && selectedCount === suiteTestCases.length
                     const isExpanded = expandedSuites.has(suiteId)
 
                     return (
@@ -531,6 +543,7 @@ export function TestPlanForm({ testPlan, projectId, onSave, onCancel, loading = 
                               type="button"
                               variant="ghost"
                               size="sm"
+                              disabled={suiteTestCases.length === 0}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 toggleSelectAllInSuite(suiteId, suiteTestCases)
@@ -546,28 +559,34 @@ export function TestPlanForm({ testPlan, projectId, onSave, onCancel, loading = 
 
                         {isExpanded && (
                           <div className="border-t p-3 space-y-2">
-                            {suiteTestCases.map((testCase) => (
-                              <div key={testCase._id} className="flex items-start space-x-3">
-                                <Checkbox
-                                  id={testCase._id}
-                                  checked={formData.testCases.includes(testCase._id)}
-                                  onCheckedChange={() => toggleTestCase(testCase._id)}
-                                />
-                                <div className="flex-1">
-                                  <Label htmlFor={testCase._id} className="text-sm font-medium cursor-pointer">
-                                    {testCase.title}
-                                  </Label>
-                                  <div className="flex items-center space-x-2 mt-1">
-                                    <Badge variant="outline" className="text-xs">
-                                      {formatToTitleCase(testCase.priority)}
-                                    </Badge>
-                                    <Badge variant="secondary" className="text-xs">
-                                      {formatToTitleCase(testCase.category)}
-                                    </Badge>
+                            {suiteTestCases.length === 0 ? (
+                              <p className="text-sm text-muted-foreground text-center py-2">
+                                No test cases in this suite
+                              </p>
+                            ) : (
+                              suiteTestCases.map((testCase) => (
+                                <div key={testCase._id} className="flex items-start space-x-3">
+                                  <Checkbox
+                                    id={testCase._id}
+                                    checked={formData.testCases.includes(testCase._id)}
+                                    onCheckedChange={() => toggleTestCase(testCase._id)}
+                                  />
+                                  <div className="flex-1">
+                                    <Label htmlFor={testCase._id} className="text-sm font-medium cursor-pointer">
+                                      {testCase.title}
+                                    </Label>
+                                    <div className="flex items-center space-x-2 mt-1">
+                                      <Badge variant="outline" className="text-xs">
+                                        {formatToTitleCase(testCase.priority)}
+                                      </Badge>
+                                      <Badge variant="secondary" className="text-xs">
+                                        {formatToTitleCase(testCase.category)}
+                                      </Badge>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
+                              ))
+                            )}
                           </div>
                         )}
                       </div>
