@@ -1514,7 +1514,9 @@ export default function TimerPage() {
                               // Timer is active/running
                               setActiveTimerSnapshot(timer)
                               setLiveActiveTimer(timer)
-                              if (timeTrackingSettings?.notifications?.onTimerStart && !hadActiveTimerRef.current) {
+                              // Show a reliable start snackbar when the user starts a new timer from this page.
+                              // Avoid showing it when the page simply loads an already-active timer.
+                              if (!hadActiveTimerRef.current) {
                                 showToast({
                                   type: 'success',
                                   title: 'Timer Started',

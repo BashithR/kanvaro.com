@@ -3556,7 +3556,7 @@ export function TimeLogs({
 <TooltipContent 
   side="bottom" 
   className="max-w-sm whitespace-normal break-words">
-                                      <p className="font-medium truncate block" >{task.title}</p>
+                                      <p className="font-medium whitespace-normal break-words">{task.title}</p>
                                     </TooltipContent>
                                   </Tooltip>
                                 </div>
