@@ -1,3 +1,10 @@
+## [1.32.2](https://github.com/EchonLabs/kanvaro.com/compare/v1.32.1...v1.32.2) (2026-04-21)
+
+
+### Bug Fixes
+
+* sanitize task descriptions and improve HTML handling in task components ([845e8bc](https://github.com/EchonLabs/kanvaro.com/commit/845e8bc135ff3df9c1057e6e063c2551a76a029d))
+
 ## [1.32.1](https://github.com/EchonLabs/kanvaro.com/compare/v1.32.0...v1.32.1) (2026-04-20)
 
 
