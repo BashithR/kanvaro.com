@@ -1,3 +1,10 @@
+## [1.32.4](https://github.com/EchonLabs/kanvaro.com/compare/v1.32.3...v1.32.4) (2026-04-21)
+
+
+### Bug Fixes
+
+* add sanitize-html dependency for improved HTML sanitization ([351d015](https://github.com/EchonLabs/kanvaro.com/commit/351d01507a8ce0c96a087f06ca3ce552a69ceeb8))
+
 ## [1.32.3](https://github.com/EchonLabs/kanvaro.com/compare/v1.32.2...v1.32.3) (2026-04-21)
 
 
