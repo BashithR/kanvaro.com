@@ -3,6 +3,8 @@ import { connectDB } from '@/lib/db-config'
 import { TestCase, TestSuite, Project } from '@/models'
 // import { getServerSession } from 'next-auth'
 import { authenticateUser } from '@/lib/auth-utils'
+import { hasTestPermission } from '@/lib/permissions/test-permission-helper'
+import { Permission } from '@/lib/permissions/permission-definitions'
 
 export async function GET(
   req: NextRequest,
@@ -28,6 +30,8 @@ export async function GET(
     // Check if user has access to the project (safe ObjectId comparisons)
     const project = await Project.findById(testCase.project)
     const userIdStr_GET = authResult.user.id?.toString?.() || String(authResult.user.id)
+    const roleStr_GET = (authResult.user.role || '').toString()
+    const hasRolePerm_GET = await hasTestPermission(userIdStr_GET, roleStr_GET, Permission.TEST_CASE_READ)
     const teamHasUser_GET = Array.isArray(project?.teamMembers)
       ? project.teamMembers.some((m: any) => m?.toString?.() === userIdStr_GET)
       : false
@@ -37,7 +41,7 @@ export async function GET(
           (role: any) => role?.user?.toString?.() === userIdStr_GET && ['project_manager', 'project_qa_lead', 'project_tester'].includes(role.role)
         )
       : false
-    const hasAccess = !!project && (createdByStr_GET === userIdStr_GET || teamHasUser_GET || roleHasUser_GET)
+    const hasAccess = hasRolePerm_GET || (!!project && (createdByStr_GET === userIdStr_GET || teamHasUser_GET || roleHasUser_GET))
 
     if (!hasAccess) {
       return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 })
@@ -95,6 +99,8 @@ export async function PUT(
     // Check if user has access to the project (safe ObjectId comparisons)
     const project = await Project.findById(testCase.project)
     const userIdStr = authResult.user.id?.toString?.() || String(authResult.user.id)
+    const roleStr = (authResult.user.role || '').toString()
+    const hasRolePerm = await hasTestPermission(userIdStr, roleStr, Permission.TEST_CASE_UPDATE)
     const teamHasUser = Array.isArray(project?.teamMembers)
       ? project.teamMembers.some((m: any) => m?.toString?.() === userIdStr)
       : false
@@ -104,7 +110,7 @@ export async function PUT(
           (role: any) => role?.user?.toString?.() === userIdStr && ['project_manager', 'project_qa_lead'].includes(role.role)
         )
       : false
-    const hasAccess = !!project && (createdByStr === userIdStr || teamHasUser || roleHasUser)
+    const hasAccess = hasRolePerm || (!!project && (createdByStr === userIdStr || teamHasUser || roleHasUser))
 
     if (!hasAccess) {
       return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 })
@@ -177,6 +183,8 @@ export async function DELETE(
     // Check if user has access to the project (safe ObjectId comparisons)
     const project = await Project.findById(testCase.project)
     const userIdStr_DEL = authResult.user.id?.toString?.() || String(authResult.user.id)
+    const roleStr_DEL = (authResult.user.role || '').toString()
+    const hasRolePerm_DEL = await hasTestPermission(userIdStr_DEL, roleStr_DEL, Permission.TEST_CASE_DELETE)
     const teamHasUser_DEL = Array.isArray(project?.teamMembers)
       ? project.teamMembers.some((m: any) => m?.toString?.() === userIdStr_DEL)
       : false
@@ -186,7 +194,7 @@ export async function DELETE(
           (role: any) => role?.user?.toString?.() === userIdStr_DEL && ['project_manager', 'project_qa_lead'].includes(role.role)
         )
       : false
-    const hasAccess = !!project && (createdByStr_DEL === userIdStr_DEL || teamHasUser_DEL || roleHasUser_DEL)
+    const hasAccess = hasRolePerm_DEL || (!!project && (createdByStr_DEL === userIdStr_DEL || teamHasUser_DEL || roleHasUser_DEL))
 
     if (!hasAccess) {
       return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 })

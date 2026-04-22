@@ -1,17 +1,18 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { useBreadcrumb } from '@/contexts/BreadcrumbContext'
 import TestCaseList from '@/components/test-management/TestCaseList'
-import { TestCaseForm } from '@/components/test-management/TestCaseForm'
 import { DeleteConfirmDialog } from '@/components/test-management/DeleteConfirmDialog'
-import { ResponsiveDialog } from '@/components/ui/ResponsiveDialog'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Plus, AlertCircle } from 'lucide-react'
 import { Permission } from '@/lib/permissions'
 import { PermissionGate } from '@/lib/permissions/permission-components'
+import { useNotify } from '@/lib/notify'
 
 interface TestCase {
   _id: string
@@ -36,23 +37,6 @@ interface TestCase {
   updatedAt: string
 }
 
-interface FormTestCase {
-  _id?: string
-  title: string
-  description: string
-  preconditions: string
-  steps: Array<{ step: string; expectedResult: string }>
-  expectedResult: string
-  testData: string
-  priority: 'low' | 'medium' | 'high' | 'critical'
-  category: 'functional' | 'integration' | 'regression' | 'performance' | 'security' | 'usability' | 'compatibility'
-  automationStatus: 'not_automated' | 'automated' | 'semi_automated' | 'deprecated'
-  estimatedExecutionTime: number
-  testSuite: string
-  tags: string[]
-  requirements?: string
-}
-
 interface Project {
   _id: string
   name: string
@@ -61,15 +45,15 @@ interface Project {
 }
 
 export default function TestCasesPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const { setItems } = useBreadcrumb()
+  const { success: notifySuccess, error: notifyError, warning: notifyWarning } = useNotify()
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProject, setSelectedProject] = useState<string>('')
-  const [testCases, setTestCases] = useState<TestCase[]>([])
-  const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false)
+  const [projectQuery, setProjectQuery] = useState('')
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [selectedTestCase, setSelectedTestCase] = useState<FormTestCase | null>(null)
   const [deleteItem, setDeleteItem] = useState<{ id: string; name: string } | null>(null)
-  const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [refreshCounter, setRefreshCounter] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -86,6 +70,13 @@ export default function TestCasesPage() {
     fetchProjects()
   }, [])
 
+  useEffect(() => {
+    const projectIdFromQuery = searchParams.get('projectId')
+    if (projectIdFromQuery && projectIdFromQuery !== selectedProject) {
+      setSelectedProject(projectIdFromQuery)
+    }
+  }, [searchParams, selectedProject])
+
   const fetchProjects = async () => {
     try {
       setLoading(true)
@@ -94,9 +85,6 @@ export default function TestCasesPage() {
 
       if (data.success) {
         setProjects(data.data)
-        if (data.data.length > 0) {
-          setSelectedProject(data.data[0]._id)
-        }
       }
     } catch (error) {
       console.error('Error fetching projects:', error)
@@ -107,98 +95,68 @@ export default function TestCasesPage() {
 
   const handleCreateTestCase = () => {
     if (!selectedProject) {
-      alert('Please select a project first')
+      notifyWarning({ title: 'Select a project first.' })
       return
     }
-    setSelectedTestCase(null)
-    setTestCaseDialogOpen(true)
+    router.push(`/test-management/cases/new?projectId=${encodeURIComponent(selectedProject)}`)
   }
 
   const handleEditTestCase = (testCase: TestCase) => {
-    const formTestCase: FormTestCase = {
-      _id: testCase._id,
-      title: testCase.title,
-      description: (testCase as any)?.description || '',
-      preconditions: (testCase as any)?.preconditions || '',
-      steps: (testCase as any)?.steps || [{ step: '', expectedResult: '' }],
-      expectedResult: (testCase as any)?.expectedResult || '',
-      testData: (testCase as any)?.testData || '',
-      priority: testCase.priority,
-      category: testCase.category,
-      automationStatus: testCase.automationStatus,
-      estimatedExecutionTime: testCase.estimatedExecutionTime,
-      testSuite: testCase.testSuite._id,
-      tags: testCase.tags || [],
-      requirements: (testCase as any)?.requirements || ''
-    }
-    setSelectedTestCase(formTestCase)
-    setTestCaseDialogOpen(true)
+    router.push(
+      `/test-management/cases/${encodeURIComponent(testCase._id)}/edit?projectId=${encodeURIComponent(selectedProject)}`
+    )
   }
 
-  const handleDeleteTestCase = (testCaseId: string) => {
-    // Find the test case to get its name
-    const testCase = testCases.find(tc => tc._id === testCaseId)
-    const testCaseName = testCase?.title || 'Unknown Test Case'
-    setDeleteItem({ id: testCaseId, name: testCaseName })
+  const handleDeleteTestCase = (testCaseId: string, testCaseTitle?: string) => {
+    setDeleteItem({ id: testCaseId, name: testCaseTitle || 'Unknown Test Case' })
     setDeleteDialogOpen(true)
   }
 
-  const handleSaveTestCase = async (testCaseData: FormTestCase) => {
-    setSaving(true)
-    try {
-      const url = selectedTestCase?._id 
-        ? `/api/test-cases/${selectedTestCase._id}`
-        : '/api/test-cases'
-      
-      const method = selectedTestCase?._id ? 'PUT' : 'POST'
-      
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...testCaseData,
-          // API expects testSuiteId, include it always to be explicit
-          testSuiteId: testCaseData.testSuite,
-          projectId: selectedProject
-        })
-      })
-
-      if (response.ok) {
-        setTestCaseDialogOpen(false)
-        setSelectedTestCase(null)
-        setRefreshCounter(c => c + 1)
-      } else {
-        console.error('Failed to save test case')
-      }
-    } catch (error) {
-      console.error('Error saving test case:', error)
-    } finally {
-      setSaving(false)
+  const handleExecuteTestCase = (testCase: TestCase) => {
+    if (!selectedProject) {
+      notifyWarning({ title: 'Select a project first.' })
+      return
     }
+
+    router.push(
+      `/test-management/executions/new?projectId=${encodeURIComponent(selectedProject)}&testCaseId=${encodeURIComponent(testCase._id)}`
+    )
   }
 
   const handleConfirmDelete = async () => {
     if (!deleteItem) return
-    
+
     setDeleting(true)
     try {
       const response = await fetch(`/api/test-cases/${deleteItem.id}`, {
         method: 'DELETE'
       })
 
-      if (response.ok) {
+      const data = await response.json().catch(() => ({}))
+
+      if (response.ok && (data as any)?.success !== false) {
+        notifySuccess({ title: 'Test case deleted.' })
         setDeleteDialogOpen(false)
         setDeleteItem(null)
         setRefreshCounter(c => c + 1)
       } else {
-        console.error('Failed to delete test case')
+        notifyError({
+          title: 'Failed to delete test case.',
+          message: (data as any)?.error || 'Please try again.'
+        })
+        console.error('Failed to delete test case', data)
       }
     } catch (error) {
+      notifyError({ title: 'Failed to delete test case.', message: 'Please try again.' })
       console.error('Error deleting test case:', error)
     } finally {
       setDeleting(false)
     }
   }
+
+  const filteredProjects = projects.filter(project =>
+    !projectQuery.trim() || project.name.toLowerCase().includes(projectQuery.toLowerCase())
+  )
 
   return (
     <MainLayout>
@@ -218,21 +176,44 @@ export default function TestCasesPage() {
           </div>
 
         {/* Project Selection */}
-        <div className="flex items-center gap-4">
+        <div className="space-y-1">
           <div className="flex items-center gap-2">
             <label htmlFor="project-select" className="text-sm font-medium">
               Project:
             </label>
-            <Select value={selectedProject} onValueChange={setSelectedProject}>
+            <Select
+              value={selectedProject}
+              onValueChange={setSelectedProject}
+              onOpenChange={(open) => {
+                if (open) setProjectQuery('')
+              }}
+            >
               <SelectTrigger id="project-select" className="w-64">
                 <SelectValue placeholder="Select a project" />
               </SelectTrigger>
-              <SelectContent>
-                {projects.map((project) => (
-                  <SelectItem key={project._id} value={project._id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
+              <SelectContent className="p-0">
+                <div className="p-2">
+                  <Input
+                    value={projectQuery}
+                    onChange={(e) => setProjectQuery(e.target.value)}
+                    placeholder="Search projects"
+                    className="mb-2"
+                    onKeyDown={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <div className="max-h-56 overflow-y-auto">
+                    {filteredProjects.length === 0 ? (
+                      <div className="px-2 py-2 text-sm text-muted-foreground">No matching projects</div>
+                    ) : (
+                      filteredProjects.map((project) => (
+                        <SelectItem key={project._id} value={project._id}>
+                          {project.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </div>
+                </div>
               </SelectContent>
             </Select>
           </div>
@@ -248,29 +229,13 @@ export default function TestCasesPage() {
           <TestCaseList 
             projectId={selectedProject}
             key={`${selectedProject}-${refreshCounter}`}
+            showAddButton={false}
             onTestCaseCreate={handleCreateTestCase}
             onTestCaseEdit={handleEditTestCase}
             onTestCaseDelete={handleDeleteTestCase}
+            onTestCaseExecute={handleExecuteTestCase}
           />
         </div>
-
-        {/* Dialogs */}
-        <ResponsiveDialog
-          open={testCaseDialogOpen}
-          onOpenChange={setTestCaseDialogOpen}
-          title={selectedTestCase ? 'Edit Test Case' : 'Create Test Case'}
-        >
-          <TestCaseForm
-            testCase={selectedTestCase || undefined}
-            projectId={selectedProject}
-            onSave={handleSaveTestCase}
-            onCancel={() => {
-              setTestCaseDialogOpen(false)
-              setSelectedTestCase(null)
-            }}
-            loading={saving}
-          />
-        </ResponsiveDialog>
 
         <DeleteConfirmDialog
           isOpen={deleteDialogOpen}

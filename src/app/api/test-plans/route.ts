@@ -4,6 +4,8 @@ import { TestPlan, Project } from '@/models'
 import '@/models/TestCase' // Ensure TestCase model is registered for populate
 // import { getServerSession } from 'next-auth'
 import { authenticateUser } from '@/lib/auth-utils'
+import { hasTestPermission } from '@/lib/permissions/test-permission-helper'
+import { Permission } from '@/lib/permissions/permission-definitions'
 
 export async function GET(req: NextRequest) {
   try {
@@ -16,6 +18,7 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const projectId = searchParams.get('projectId')
+    const testCaseId = searchParams.get('testCaseId')
     const status = searchParams.get('status')
     const search = searchParams.get('search')
     const page = parseInt(searchParams.get('page') || '1')
@@ -25,6 +28,10 @@ export async function GET(req: NextRequest) {
 
     if (projectId) {
       query.project = projectId
+    }
+
+    if (testCaseId) {
+      query.testCases = testCaseId
     }
 
     if (status) {
@@ -76,15 +83,14 @@ export async function POST(req: NextRequest) {
     await connectDB()
     const authResult = await authenticateUser()
     console.log('authResult', authResult);
-    // Normalize user id to string regardless of shape
     const userIdStr = (authResult as any)?.user?.id
       ? (authResult as any).user.id.toString()
       : (authResult as any)?.id?.toString?.()
     const orgIdStr = (authResult as any)?.user?.organization
       ? (authResult as any).user.organization.toString()
       : (authResult as any)?.organization?.toString?.()
-    const roleStr = (authResult as any)?.user?.role ?? (authResult as any)?.role
-    const isAdmin = typeof roleStr === 'string' && ['admin', 'super_admin', 'superadmin'].includes(roleStr.toLowerCase())
+    const roleStr = (((authResult as any)?.user?.role ?? (authResult as any)?.role) || '').toString()
+    const hasRolePerm = await hasTestPermission(userIdStr || '', roleStr, Permission.TEST_PLAN_CREATE)
     
     if ('error' in authResult) {
       return NextResponse.json({ success: false, error: authResult.error }, { status: authResult.status })
@@ -134,8 +140,8 @@ export async function POST(req: NextRequest) {
           (role: any) => role?.user?.toString?.() === userIdStr && ['project_manager', 'project_qa_lead'].includes(role.role)
         )
       : false
-    const hasAccess = !!userIdStr && (isAdmin || createdByStr === userIdStr || teamHasUser || roleHasUser)
-    console.log('createdByStr', createdByStr, 'userIdStr', userIdStr, { isAdmin, teamHasUser, roleHasUser, hasAccess })
+    const hasAccess = !!userIdStr && (hasRolePerm || createdByStr === userIdStr || teamHasUser || roleHasUser)
+    console.log('createdByStr', createdByStr, 'userIdStr', userIdStr, { hasRolePerm, teamHasUser, roleHasUser, hasAccess })
 
     if (!hasAccess) {
       return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 })

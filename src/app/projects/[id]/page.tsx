@@ -1,10 +1,9 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/Card'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { formatToTitleCase } from '@/lib/utils'
@@ -13,10 +12,7 @@ import { useNotify } from '@/lib/notify'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Progress } from '@/components/ui/Progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Input } from '@/components/ui/Input'
-import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import {
   ArrowLeft,
@@ -31,26 +27,19 @@ import {
   XCircle,
   Play,
   Loader2,
-  Settings,
   Plus,
   BarChart3,
-  Kanban,
-  List,
-  User,
-  Calendar as CalendarIcon,
   Target,
-  Zap,
   Download,
   ChevronDown,
   Edit,
   MoreVertical,
-  UserPlus,
   Save,
   Trash2,
   Paperclip,
   Link as LinkIcon,
   File,
-  Image,
+  Image as ImageIcon,
   ExternalLink,
   Upload
 } from 'lucide-react'
@@ -67,12 +56,11 @@ import TaskList from '@/components/tasks/TaskList'
 import KanbanBoard from '@/components/tasks/KanbanBoard'
 import CalendarView from '@/components/tasks/CalendarView'
 import BacklogView from '@/components/tasks/BacklogView'
-import ReportsView from '@/components/tasks/ReportsView'
 import TestSuiteTree from '@/components/test-management/TestSuiteTree'
 import TestCaseList from '@/components/test-management/TestCaseList'
 import { ResponsiveDialog } from '@/components/ui/ResponsiveDialog'
 import { TestSuiteForm } from '@/components/test-management/TestSuiteForm'
-import { TestCaseForm } from '@/components/test-management/TestCaseForm'
+import { DeleteConfirmDialog } from '@/components/test-management/DeleteConfirmDialog'
 import { TestSuiteDetailDialog } from '@/components/test-management/TestSuiteDetailDialog'
 import { ProjectTeamTab } from '@/components/projects/ProjectTeamTab'
 import { useOrgCurrency } from '@/hooks/useOrgCurrency'
@@ -180,9 +168,73 @@ interface Project {
 }
 
 type ExpenseAttachment = {
-  url?: string | null
-  name?: string | null
-  size?: number | null
+  name: string
+  url: string
+  size: number
+  type: string
+  uploadedAt?: string
+  uploadedBy?: string | { _id?: string; id?: string; firstName?: string; lastName?: string; email?: string }
+}
+
+type IdLike = string | { toString: () => string }
+
+type ProjectTask = {
+  _id: IdLike
+  title?: string
+}
+
+type IncomeCategory = 'invoice' | 'consulting' | 'other'
+type IncomeSubCategory = 'amc' | 'cr'
+
+type IncomeAttachment = {
+  name: string
+  url: string
+  size: number
+  type: string
+  uploadedAt?: string
+  uploadedBy?: string | { _id?: string; id?: string; firstName?: string; lastName?: string; email?: string }
+}
+
+type Income = {
+  _id: string
+  invoiceNumber?: string
+  category?: IncomeCategory
+  subCategory?: IncomeSubCategory
+  description?: string
+  utilizableBudget?: number
+  approvedDate?: string | Date
+  actualStartDate?: string | Date
+  attachments?: IncomeAttachment[]
+}
+
+type Expense = {
+  _id: string
+  name: string
+  description?: string
+  category?: ExpenseCategory
+  expenseDate?: string | Date
+  unitPrice?: number
+  quantity?: number
+  fullAmount?: number
+  isBillable?: boolean
+  paidStatus?: 'paid' | 'unpaid'
+  paidBy?: string | { firstName: string; lastName: string }
+  attachments?: ExpenseAttachment[]
+}
+
+type TestSuite = {
+  _id?: string
+  name: string
+  description: string
+  parentSuite?: string
+  project: string
+}
+
+type ExpenseCategory = 'labor' | 'materials' | 'overhead' | 'external' | 'other'
+
+type ExpenseToDelete = {
+  id: string
+  name: string
 }
 
 export default function ProjectDetailPage() {
@@ -195,8 +247,7 @@ export default function ProjectDetailPage() {
   const orgCurrency = organization?.currency || 'USD'
   const { formatCurrency } = useOrgCurrency()
   const { formatDate } = useDateTime()
-  const { hasPermission, permissions, loading: permissionsLoading } = usePermissions()
-  const isAdmin = typeof permissions?.userRole === 'string' && ['admin', 'super_admin', 'superadmin'].includes(permissions.userRole.toLowerCase())
+  const { hasPermission, loading: permissionsLoading } = usePermissions()
   const canUpdateProject = hasPermission(Permission.PROJECT_UPDATE)
   const canCreateTask = hasPermission(Permission.TASK_CREATE)
   const canManageTests = hasPermission(Permission.TEST_MANAGE)
@@ -211,17 +262,18 @@ export default function ProjectDetailPage() {
   const [showEditTaskModal, setShowEditTaskModal] = useState(false)
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
   const [showAddIncomeDialog, setShowAddIncomeDialog] = useState(false)
-  const [selectedTask, setSelectedTask] = useState<any | null>(null)
-  const [tasks, setTasks] = useState<any[]>([])
+  const [editingIncome, setEditingIncome] = useState<Income | null>(null)
+  const [selectedTask, setSelectedTask] = useState<ProjectTask | null>(null)
+  const [tasks, setTasks] = useState<ProjectTask[]>([])
   const [suiteDialogOpen, setSuiteDialogOpen] = useState(false)
   const [suiteSaving, setSuiteSaving] = useState(false)
-  const [expenses, setExpenses] = useState<any[]>([])
+  const [expenses, setExpenses] = useState<Expense[]>([])
   const [showAddExpenseDialog, setShowAddExpenseDialog] = useState(false)
   const [expensesLoading, setExpensesLoading] = useState(false)
-  const [incomes, setIncomes] = useState<any[]>([])
+  const [incomes, setIncomes] = useState<Income[]>([])
   const [incomesLoading, setIncomesLoading] = useState(false)
-  const [editingSuite, setEditingSuite] = useState<any | null>(null)
-  const [editingExpense, setEditingExpense] = useState<any | null>(null)
+  const [editingSuite, setEditingSuite] = useState<TestSuite | null>(null)
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null)
   const [showDeleteExpenseConfirmModal, setShowDeleteExpenseConfirmModal] = useState(false)
   const [expandedExpenseAttachments, setExpandedExpenseAttachments] = useState<Record<string, boolean>>({})
   const toggleExpenseAttachments = (expenseId: string) => {
@@ -239,14 +291,78 @@ export default function ProjectDetailPage() {
     return `${(size / 1024).toFixed(1)} KB`
   }
 
-  const [expenseToDelete, setExpenseToDelete] = useState<any | null>(null)
+  const formatCurrencyNoGrouping = (amount: number, currency = 'USD') => {
+    // Keep currency display but remove thousand separators: 1000.00 (not 1,000.00)
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+      useGrouping: false,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount).replace(/\u00A0/g, ' ')
+  }
+
+  const isRecord = (value: unknown): value is Record<string, unknown> => {
+    return typeof value === 'object' && value !== null
+  }
+
+  const resolveUploadedByName = (uploadedBy: unknown): string | undefined => {
+    if (!uploadedBy) return undefined
+
+    if (isRecord(uploadedBy)) {
+      const firstName = uploadedBy.firstName
+      const lastName = uploadedBy.lastName
+      if (typeof firstName === 'string' && typeof lastName === 'string') {
+        return `${firstName} ${lastName}`.trim()
+      }
+    }
+
+    if (typeof uploadedBy === 'string') {
+      const userId = uploadedBy
+      const matchedMember = project?.teamMembers?.find((member) => {
+        const memberId = member.memberId
+        if (isRecord(memberId)) {
+          const memberRecord = memberId as Record<string, unknown>
+          const id = memberRecord['_id'] ?? memberRecord['id']
+          return typeof id === 'string' && id === userId
+        }
+        return false
+      })
+
+      const memberId = matchedMember?.memberId
+      if (isRecord(memberId)) {
+        const firstName = memberId.firstName
+        const lastName = memberId.lastName
+        if (typeof firstName === 'string' && typeof lastName === 'string') {
+          return `${firstName} ${lastName}`.trim()
+        }
+      }
+
+      if (typeof matchedMember?.firstName === 'string' || typeof matchedMember?.lastName === 'string') {
+        return `${matchedMember?.firstName ?? ''} ${matchedMember?.lastName ?? ''}`.trim()
+      }
+    }
+
+    return undefined
+  }
+
+  const resolveUploadedById = (uploadedBy: unknown): string | undefined => {
+    if (!uploadedBy) return undefined
+    if (typeof uploadedBy === 'string') return uploadedBy
+    if (isRecord(uploadedBy)) {
+      const id = uploadedBy._id ?? uploadedBy.id
+      if (typeof id === 'string' && id) return id
+    }
+    return undefined
+  }
+
+  const [expenseToDelete, setExpenseToDelete] = useState<ExpenseToDelete | null>(null)
   const [parentSuiteIdForCreate, setParentSuiteIdForCreate] = useState<string | undefined>(undefined)
   const [suitesRefreshCounter, setSuitesRefreshCounter] = useState(0)
-  const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false)
-  const [testCaseSaving, setTestCaseSaving] = useState(false)
-  const [editingTestCase, setEditingTestCase] = useState<any | null>(null)
-  const [createCaseSuiteId, setCreateCaseSuiteId] = useState<string | undefined>(undefined)
   const [testCasesRefreshCounter, setTestCasesRefreshCounter] = useState(0)
+  const [testCaseDeleteDialogOpen, setTestCaseDeleteDialogOpen] = useState(false)
+  const [testCaseDeleteItem, setTestCaseDeleteItem] = useState<{ id: string; name: string } | null>(null)
+  const [testCaseDeleting, setTestCaseDeleting] = useState(false)
   const [suiteDetailDialogOpen, setSuiteDetailDialogOpen] = useState(false)
   const [detailSuiteId, setDetailSuiteId] = useState<string | null>(null)
   const [suiteDetailRefreshKey, setSuiteDetailRefreshKey] = useState(0)
@@ -285,6 +401,31 @@ export default function ProjectDetailPage() {
   // Use the notification hook
   const { success: notifySuccess, error: notifyError } = useNotify()
 
+  const handleConfirmDeleteTestCase = async () => {
+    if (!testCaseDeleteItem?.id) return
+
+    setTestCaseDeleting(true)
+    try {
+      const res = await fetch(`/api/test-cases/${testCaseDeleteItem.id}`, { method: 'DELETE' })
+      if (res.ok) {
+        notifySuccess({ title: 'Test Case deleted successfully.' })
+        setTestCaseDeleteDialogOpen(false)
+        setTestCaseDeleteItem(null)
+        setTestCasesRefreshCounter(c => c + 1)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        console.error('Failed to delete test case', data)
+        notifyError({ title: 'Failed to delete test case.' })
+      }
+    } catch (e) {
+      console.error('Error deleting test case:', e)
+      notifyError({ title: 'Failed to delete test case.' })
+    } finally {
+      setTestCaseDeleting(false)
+    }
+  }
+
+
   const totalExpenses = useMemo(
     () => expenses.reduce((sum, exp) => sum + (exp.fullAmount || 0), 0),
     [expenses]
@@ -307,16 +448,71 @@ export default function ProjectDetailPage() {
   const documentationShowingStart = documentationLinks.length ? docSliceStart + 1 : 0
   const documentationShowingEnd = documentationLinks.length ? Math.min(docSliceStart + linkPaginationSize, documentationLinks.length) : 0
 
-  useEffect(() => {
-    if (projectId) {
-      fetchProject()
-      fetchTasks()
-      fetchGlobalTimeTrackingSettings()
+  const fetchProject = useCallback(async () => {
+    try {
+      setLoading(true)
+      const response = await fetch(`/api/projects/${projectId}`)
+      const data = await response.json()
+
+      if (data.success) {
+        setProject(data.data)
+      } else {
+        setError(data.error || 'Failed to fetch project')
+      }
+    } catch {
+      setError('Failed to fetch project')
+    } finally {
+      setLoading(false)
     }
+  }, [projectId])
+
+  const fetchTasks = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/tasks?project=${projectId}`)
+      const data = await response.json()
+
+      if (data.success) {
+        setTasks(data.data)
+      }
+    } catch (error) {
+      console.error('Error fetching tasks:', error)
+    }
+  }, [projectId])
+
+  const fetchGlobalTimeTrackingSettings = useCallback(async () => {
+    try {
+      const response = await fetch('/api/time-tracking/settings')
+      const data = await response.json()
+
+      // Handle both response structures: {settings: ...} or {success: true, data: ...}
+      const settingsData = data.settings || (data.success && data.data)
+
+      if (settingsData) {
+        const settings = {
+          allowTimeTracking: settingsData.allowTimeTracking ?? true,
+          allowManualTimeSubmission: settingsData.allowManualTimeSubmission ?? true,
+          requireApproval: settingsData.requireApproval ?? false,
+          allowBillableTime: settingsData.allowBillableTime ?? true,
+        }
+        setGlobalTimeTrackingSettings(settings)
+      } else {
+        console.warn('[VIEW PROJECT] No settings found in response:', data)
+      }
+    } catch (error) {
+      console.error('[VIEW PROJECT] Error fetching global time tracking settings:', error)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!projectId) return
+
+    void fetchProject()
+    void fetchTasks()
+    void fetchGlobalTimeTrackingSettings()
 
     // Listen for organization settings updates to refresh global time tracking settings
     const handleOrganizationSettingsUpdated = () => {
-      fetchGlobalTimeTrackingSettings()
+      void fetchGlobalTimeTrackingSettings()
     }
 
     window.addEventListener('organization-settings-updated', handleOrganizationSettingsUpdated)
@@ -324,7 +520,7 @@ export default function ProjectDetailPage() {
     return () => {
       window.removeEventListener('organization-settings-updated', handleOrganizationSettingsUpdated)
     }
-  }, [projectId])
+  }, [projectId, fetchGlobalTimeTrackingSettings, fetchProject, fetchTasks])
 
   // Redirect from testing tab if user doesn't have permission
   useEffect(() => {
@@ -335,7 +531,7 @@ export default function ProjectDetailPage() {
     }
   }, [activeTab, canManageTests, projectId, router, searchParams])
 
-  const fetchExpenses = async () => {
+  const fetchExpenses = useCallback(async () => {
     if (!projectId || !project?.settings?.allowExpenseTracking) return
 
     try {
@@ -351,9 +547,9 @@ export default function ProjectDetailPage() {
     } finally {
       setExpensesLoading(false)
     }
-  }
+  }, [projectId, project?.settings?.allowExpenseTracking])
 
-  const fetchIncomes = async () => {
+  const fetchIncomes = useCallback(async () => {
     if (!projectId || !canViewIncome) return
 
     try {
@@ -372,17 +568,7 @@ export default function ProjectDetailPage() {
     } finally {
       setIncomesLoading(false)
     }
-  }
-
-  const handleExpenseAdded = () => {
-    fetchExpenses()
-    setShowAddExpenseDialog(false)
-  }
-
-  const handleExpenseUpdated = () => {
-    fetchExpenses()
-    setEditingExpense(null)
-  }
+  }, [projectId, canViewIncome])
 
   const handleExpenseDeleted = async (expenseId: string, expenseName: string) => {
     setExpenseToDelete({ id: expenseId, name: expenseName })
@@ -415,15 +601,15 @@ export default function ProjectDetailPage() {
 
   useEffect(() => {
     if (project && project.settings?.allowExpenseTracking) {
-      fetchExpenses()
+      void fetchExpenses()
     }
-  }, [project])
+  }, [project, fetchExpenses])
 
   useEffect(() => {
     if (activeTab === 'budget' && canViewIncome) {
-      fetchIncomes()
+      void fetchIncomes()
     }
-  }, [activeTab, canViewIncome, projectId])
+  }, [activeTab, canViewIncome, fetchIncomes])
 
   useEffect(() => {
     if (project) {
@@ -452,10 +638,9 @@ export default function ProjectDetailPage() {
   }, [project, globalTimeTrackingSettings])
 
   useEffect(() => {
+    const timeoutId = settingsTimeoutRef.current
     return () => {
-      if (settingsTimeoutRef.current) {
-        clearTimeout(settingsTimeoutRef.current)
-      }
+      if (timeoutId) clearTimeout(timeoutId)
     }
   }, [])
 
@@ -510,61 +695,6 @@ export default function ProjectDetailPage() {
     }
   }
 
-  const fetchProject = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch(`/api/projects/${projectId}`)
-      const data = await response.json()
-
-      if (data.success) {
-        setProject(data.data)
-      } else {
-        setError(data.error || 'Failed to fetch project')
-      }
-    } catch (err) {
-      setError('Failed to fetch project')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchTasks = async () => {
-    try {
-      const response = await fetch(`/api/tasks?project=${projectId}`)
-      const data = await response.json()
-
-      if (data.success) {
-        setTasks(data.data)
-      }
-    } catch (error) {
-      console.error('Error fetching tasks:', error)
-    }
-  }
-
-  const fetchGlobalTimeTrackingSettings = async () => {
-    try {
-      const response = await fetch('/api/time-tracking/settings')
-      const data = await response.json()
-
-      // Handle both response structures: {settings: ...} or {success: true, data: ...}
-      const settingsData = data.settings || (data.success && data.data)
-
-      if (settingsData) {
-        const settings = {
-          allowTimeTracking: settingsData.allowTimeTracking ?? true,
-          allowManualTimeSubmission: settingsData.allowManualTimeSubmission ?? true,
-          requireApproval: settingsData.requireApproval ?? false,
-          allowBillableTime: settingsData.allowBillableTime ?? true,
-        }
-        setGlobalTimeTrackingSettings(settings)
-      } else {
-        console.warn('[VIEW PROJECT] No settings found in response:', data)
-      }
-    } catch (error) {
-      console.error('[VIEW PROJECT] Error fetching global time tracking settings:', error)
-    }
-  }
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'draft': return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900'
@@ -589,22 +719,12 @@ export default function ProjectDetailPage() {
     }
   }
 
-  const statusPriorityChanged = project
-    ? statusForm !== project.status || priorityForm !== project.priority
-    : false
-
   const trackingSettingsChanged = project ? (
     settingsForm.allowTimeTracking !== (project.settings?.allowTimeTracking ?? false) ||
     settingsForm.allowManualTimeSubmission !== (project.settings?.allowManualTimeSubmission ?? false) ||
     settingsForm.allowExpenseTracking !== (project.settings?.allowExpenseTracking ?? false) ||
     settingsForm.allowBillableTime !== (project.isBillableByDefault ?? false) ||
     settingsForm.requireApproval !== (project.settings?.requireApproval ?? false)
-  ) : false
-
-  const notificationSettingsChanged = project ? (
-    settingsForm.notifications.taskUpdates !== (project.settings?.notifications?.taskUpdates ?? false) ||
-    settingsForm.notifications.budgetAlerts !== (project.settings?.notifications?.budgetAlerts ?? false) ||
-    settingsForm.notifications.deadlineReminders !== (project.settings?.notifications?.deadlineReminders ?? false)
   ) : false
 
   if (loading) {
@@ -1103,7 +1223,7 @@ export default function ProjectDetailPage() {
                                 <div key={actualIndex} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 p-2 sm:p-3 border rounded-lg bg-muted/50 hover:bg-muted transition-colors">
                                   <div className="flex items-center space-x-2 sm:space-x-3 flex-1 min-w-0">
                                     {attachment.type.startsWith('image/') ? (
-                                      <Image className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground flex-shrink-0" />
+                                      <ImageIcon className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground flex-shrink-0" />
                                     ) : (
                                       <File className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground flex-shrink-0" />
                                     )}
@@ -1386,7 +1506,7 @@ export default function ProjectDetailPage() {
                         <div>
                           <p className="text-xs text-muted-foreground">External</p>
                           <p className="text-sm font-semibold">
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: orgCurrency }).format((project.budget.categories as any).external || 0)}
+                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: orgCurrency }).format(project.budget.categories.external || 0)}
                           </p>
                         </div>
                       </div>
@@ -1419,13 +1539,20 @@ export default function ProjectDetailPage() {
                         <DollarSign className="h-12 w-12 mx-auto mb-2 opacity-50" />
                         <p>No income added yet</p>
                         {canCreateIncome && (
-                          <p className="text-sm mt-1">Click "Add Income" to get started</p>
+                          <p className="text-sm mt-1">Click &quot;Add Income&quot; to get started</p>
                         )}
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {incomes.map((income: any) => {
+                        {incomes.map((income) => {
                           const attachments = Array.isArray(income.attachments) ? income.attachments : []
+                          const safeAttachments = attachments.filter(
+                            (att): att is IncomeAttachment =>
+                              typeof att?.url === 'string' &&
+                              typeof att?.name === 'string' &&
+                              typeof att?.size === 'number' &&
+                              typeof att?.type === 'string'
+                          )
                           const subCategoryLabel = income.subCategory === 'amc'
                             ? 'AMC (Annual Maintenance Cost)'
                             : income.subCategory === 'cr'
@@ -1448,10 +1575,34 @@ export default function ProjectDetailPage() {
                                         <Badge variant="outline">{subCategoryLabel}</Badge>
                                       )}
                                       <Badge variant="outline">
-                                        {formatCurrency(Number(income.utilizableBudget || 0), orgCurrency)}
+                                        {formatCurrencyNoGrouping(Number(income.utilizableBudget || 0), orgCurrency)}
                                       </Badge>
                                     </div>
                                   </div>
+
+                                  {canCreateIncome && (
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-8 w-8 p-0"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <MoreVertical className="h-4 w-4" />
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end">
+                                        <DropdownMenuItem onClick={(e) => {
+                                          e.stopPropagation()
+                                          setEditingIncome(income)
+                                        }}>
+                                          <Edit className="h-4 w-4 mr-2" />
+                                          Edit Income
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  )}
                                 </div>
 
                                 {income.description && (
@@ -1475,28 +1626,38 @@ export default function ProjectDetailPage() {
                                   )}
                                 </div>
 
-                                {attachments.length > 0 && (
+                                {safeAttachments.length > 0 && (
                                   <div className="pt-2 border-t">
                                     <div className="flex items-center justify-between mb-2">
                                       <span className="text-xs font-medium text-muted-foreground flex items-center gap-2">
                                         <Paperclip className="h-4 w-4" />
                                         Attachments
                                       </span>
-                                      <Badge variant="secondary" className="text-xs">{attachments.length}</Badge>
+                                      <Badge variant="secondary" className="text-xs">{safeAttachments.length}</Badge>
                                     </div>
-                                    <div className={`space-y-1 ${attachments.length > 3 ? 'max-h-32 overflow-y-auto pr-1' : ''}`}>
-                                      {attachments.map((att: any, index: number) => (
-                                        <a
-                                          key={`${att.url}-${index}`}
-                                          href={att.url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="text-xs text-primary hover:underline block truncate"
-                                          title={att.name}
-                                        >
-                                          {att.name}
-                                        </a>
-                                      ))}
+                                    <div className={`space-y-2 ${safeAttachments.length > 3 ? 'max-h-32 overflow-y-auto pr-1' : ''}`}>
+                                      {safeAttachments.map((att, index: number) => {
+                                        const uploadedByName = resolveUploadedByName(att.uploadedBy)
+                                        return (
+                                          <a
+                                            key={`${att.url}-${index}`}
+                                            href={att.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-start gap-2 rounded-md border bg-muted/30 px-2 py-1.5 hover:bg-muted/40 transition-colors"
+                                            title={att.name}
+                                          >
+                                            <Paperclip className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                            <div className="min-w-0">
+                                              <div className="text-xs font-medium text-foreground truncate">{att.name}</div>
+                                              <div className="text-[11px] text-muted-foreground">
+                                                {formatFileSize(att.size)}
+                                                {uploadedByName ? ` • ${uploadedByName}` : ''}
+                                              </div>
+                                            </div>
+                                          </a>
+                                        )
+                                      })}
                                     </div>
                                   </div>
                                 )}
@@ -1538,11 +1699,11 @@ export default function ProjectDetailPage() {
                       <div className="text-center py-8 text-muted-foreground">
                         <DollarSign className="h-12 w-12 mx-auto mb-2 opacity-50" />
                         <p>No expenses added yet</p>
-                        <p className="text-sm mt-1">Click "Add Expense" to get started</p>
+                        <p className="text-sm mt-1">Click &quot;Add Expense&quot; to get started</p>
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {expenses.map((expense: any) => {
+                        {expenses.map((expense) => {
                           const attachments: ExpenseAttachment[] = Array.isArray(expense.attachments)
                             ? expense.attachments as ExpenseAttachment[]
                             : []
@@ -1615,7 +1776,7 @@ export default function ProjectDetailPage() {
                                   <div className="flex justify-between">
                                     <span className="text-muted-foreground">Amount:</span>
                                     <span className="font-semibold">
-                                      {new Intl.NumberFormat('en-US', { style: 'currency', currency: orgCurrency }).format(expense.fullAmount)}
+                                      {new Intl.NumberFormat('en-US', { style: 'currency', currency: orgCurrency }).format(expense.fullAmount ?? 0)}
                                     </span>
                                   </div>
                                   <div className="flex justify-between">
@@ -1624,7 +1785,7 @@ export default function ProjectDetailPage() {
                                   </div>
                                   <div className="flex justify-between">
                                     <span className="text-muted-foreground">Date:</span>
-                                    <span>{formatDate(expense.expenseDate)}</span>
+                                    <span>{expense.expenseDate ? formatDate(expense.expenseDate) : '—'}</span>
                                   </div>
                                   {expense.isBillable && (
                                     <Badge variant="outline" className="mt-1">Billable</Badge>
@@ -1632,7 +1793,11 @@ export default function ProjectDetailPage() {
                                   {expense.paidStatus === 'paid' && expense.paidBy && (
                                     <div className="flex justify-between mt-1">
                                       <span className="text-muted-foreground">Paid by:</span>
-                                      <span>{expense.paidBy.firstName} {expense.paidBy.lastName}</span>
+                                      <span>
+                                        {typeof expense.paidBy === 'string'
+                                          ? expense.paidBy
+                                          : `${expense.paidBy.firstName} ${expense.paidBy.lastName}`}
+                                      </span>
                                     </div>
                                   )}
                                 </div>
@@ -1654,42 +1819,46 @@ export default function ProjectDetailPage() {
                                       {attachments.length === 0 ? (
                                         <p className="text-xs text-muted-foreground">No attachments added for this expense.</p>
                                       ) : (
-                                        attachments.map((att, idx) => (
-                                          <div
-                                            key={`${expense._id}-${att.url || idx}`}
-                                            className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-2 text-xs sm:flex-row sm:items-center sm:justify-between"
-                                          >
-                                            <div className="flex items-center gap-2 min-w-0">
-                                              <Paperclip className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                                              <div className="min-w-0">
-                                                <p className="font-medium text-foreground truncate" title={att.name || 'Attachment'}>
-                                                  {att.name || 'Attachment'}
-                                                </p>
-                                                {att.size && (
-                                                  <p className="text-[11px] text-muted-foreground">{formatFileSize(att.size)}</p>
-                                                )}
+                                        attachments.map((att, idx) => {
+                                          const uploadedByName = resolveUploadedByName(att.uploadedBy)
+                                          return (
+                                            <div
+                                              key={`${expense._id}-${att.url || idx}`}
+                                              className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-2 text-xs sm:flex-row sm:items-center sm:justify-between"
+                                            >
+                                              <div className="flex items-center gap-2 min-w-0">
+                                                <Paperclip className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                                <div className="min-w-0">
+                                                  <p className="font-medium text-foreground truncate" title={att.name || 'Attachment'}>
+                                                    {att.name || 'Attachment'}
+                                                  </p>
+                                                  <p className="text-[11px] text-muted-foreground">
+                                                    {formatFileSize(att.size)}
+                                                    {uploadedByName ? ` • ${uploadedByName}` : ''}
+                                                  </p>
+                                                </div>
                                               </div>
+                                              {att.url ? (
+                                                <div className="flex items-center gap-2 flex-shrink-0">
+                                                  <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" asChild>
+                                                    <a href={att.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1">
+                                                      <ExternalLink className="h-3.5 w-3.5" />
+                                                      View
+                                                    </a>
+                                                  </Button>
+                                                  <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" asChild>
+                                                    <a href={att.url} download={att.name || 'attachment'} className="inline-flex items-center gap-1">
+                                                      <Download className="h-3.5 w-3.5" />
+                                                      Download
+                                                    </a>
+                                                  </Button>
+                                                </div>
+                                              ) : (
+                                                <p className="text-[11px] text-destructive">Attachment URL unavailable.</p>
+                                              )}
                                             </div>
-                                            {att.url ? (
-                                              <div className="flex items-center gap-2 flex-shrink-0">
-                                                <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" asChild>
-                                                  <a href={att.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1">
-                                                    <ExternalLink className="h-3.5 w-3.5" />
-                                                    View
-                                                  </a>
-                                                </Button>
-                                                <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" asChild>
-                                                  <a href={att.url} download={att.name || 'attachment'} className="inline-flex items-center gap-1">
-                                                    <Download className="h-3.5 w-3.5" />
-                                                    Download
-                                                  </a>
-                                                </Button>
-                                              </div>
-                                            ) : (
-                                              <p className="text-[11px] text-destructive">Attachment URL unavailable.</p>
-                                            )}
-                                          </div>
-                                        ))
+                                          )
+                                        })
                                       )}
                                     </div>
                                   )}
@@ -1764,8 +1933,7 @@ export default function ProjectDetailPage() {
                         key={`${projectId}-${suitesRefreshCounter}`}
                         projectId={projectId}
                         onSuiteView={(suite) => {
-                          setDetailSuiteId(suite._id)
-                          setSuiteDetailDialogOpen(true)
+                          router.push(`/test-management/suites?projectId=${encodeURIComponent(projectId)}&suiteId=${encodeURIComponent(suite._id)}`)
                         }}
                         onSuiteCreate={(parentSuiteId) => {
                           setEditingSuite(null)
@@ -1777,7 +1945,25 @@ export default function ProjectDetailPage() {
                           setParentSuiteIdForCreate(undefined)
                           setSuiteDialogOpen(true)
                         }}
-                        onSuiteDelete={(suiteId) => console.log('Delete suite:', suiteId)}
+                        onSuiteDelete={async (suiteId) => {
+                          try {
+                            const res = await fetch(`/api/test-suites/${suiteId}`, { method: 'DELETE' })
+                            if (res.ok) {
+                              notifySuccess({ title: 'Test Suite deleted successfully.' })
+                              setSuitesRefreshCounter((c) => c + 1)
+                              // If currently viewing details for this suite, close it.
+                              if (detailSuiteId === suiteId) {
+                                setSuiteDetailDialogOpen(false)
+                                setDetailSuiteId(null)
+                              }
+                            } else {
+                              const data = await res.json().catch(() => ({}))
+                              console.error('Failed to delete test suite', data)
+                            }
+                          } catch (e) {
+                            console.error('Error deleting test suite:', e)
+                          }
+                        }}
                       />
                     </div>
                     <div className="lg:col-span-2">
@@ -1786,13 +1972,27 @@ export default function ProjectDetailPage() {
                         key={`${projectId}-${testCasesRefreshCounter}`}
                         onTestCaseSelect={(testCase) => console.log('Selected test case:', testCase)}
                         onTestCaseCreate={(testSuiteId) => {
-                          setEditingTestCase(null)
-                          setCreateCaseSuiteId(testSuiteId)
-                          setTestCaseDialogOpen(true)
+                          const qp = new URLSearchParams({ projectId })
+                          if (testSuiteId) qp.set('testSuiteId', testSuiteId)
+                          router.push(`/test-management/cases/new?${qp.toString()}`)
                         }}
-                        onTestCaseEdit={(testCase) => console.log('Edit test case:', testCase)}
-                        onTestCaseDelete={(testCaseId) => console.log('Delete test case:', testCaseId)}
-                        onTestCaseExecute={(testCase) => console.log('Execute test case:', testCase)}
+                        onTestCaseEdit={(testCase) => {
+                          router.push(
+                            `/test-management/cases/${encodeURIComponent(testCase._id)}/edit?projectId=${encodeURIComponent(projectId)}`
+                          )
+                        }}
+                        onTestCaseDelete={(testCaseId, testCaseTitle) => {
+                          setTestCaseDeleteItem({
+                            id: testCaseId,
+                            name: testCaseTitle || 'this test case'
+                          })
+                          setTestCaseDeleteDialogOpen(true)
+                        }}
+                        onTestCaseExecute={(testCase) => {
+                          router.push(
+                            `/test-management/executions/new?projectId=${encodeURIComponent(projectId)}&testCaseId=${encodeURIComponent(testCase._id)}`
+                          )
+                        }}
                       />
                     </div>
                   </div>
@@ -1897,7 +2097,7 @@ export default function ProjectDetailPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-4">
-                        {project?.teamMembers?.slice(0, 3).map((member: any, index: number) => {
+                        {project?.teamMembers?.slice(0, 3).map((member: Project['teamMembers'][number], index: number) => {
                           const user = member.memberId;
                           return (
                             <div key={member._id || index} className="flex items-center space-x-4">
@@ -2181,6 +2381,7 @@ export default function ProjectDetailPage() {
             open={suiteDialogOpen}
             onOpenChange={setSuiteDialogOpen}
             title={editingSuite ? 'Edit Test Suite' : 'Create Test Suite'}
+            dismissible={false}
             footer={
               <>
                 <Button
@@ -2205,7 +2406,7 @@ export default function ProjectDetailPage() {
             }
           >
             <TestSuiteForm
-              testSuite={editingSuite || (parentSuiteIdForCreate ? { name: '', description: '', parentSuite: parentSuiteIdForCreate, project: projectId } as any : undefined)}
+              testSuite={editingSuite || (parentSuiteIdForCreate ? { name: '', description: '', parentSuite: parentSuiteIdForCreate, project: projectId } : undefined)}
               projectId={projectId}
               onSave={async (suiteData) => {
                 setSuiteSaving(true)
@@ -2223,6 +2424,7 @@ export default function ProjectDetailPage() {
                     })
                   })
                   if (res.ok) {
+                    notifySuccess({ title: isEdit ? 'Test Suite updated successfully.' : 'Test Suite created successfully.' })
                     setSuiteDialogOpen(false)
                     setEditingSuite(null)
                     setParentSuiteIdForCreate(undefined)
@@ -2253,57 +2455,18 @@ export default function ProjectDetailPage() {
             />
           </ResponsiveDialog>
 
-          <ResponsiveDialog
-            open={testCaseDialogOpen}
-            onOpenChange={setTestCaseDialogOpen}
-            title={editingTestCase ? 'Edit Test Case' : 'Create Test Case'}
-          >
-            <TestCaseForm
-              testCase={editingTestCase || (createCaseSuiteId ? { testSuite: createCaseSuiteId } as any : undefined)}
-              projectId={projectId}
-              onSave={async (testCaseData: any) => {
-                setTestCaseSaving(true)
-                try {
-                  const isEdit = !!editingTestCase?._id
-                  const res = await fetch('/api/test-cases', {
-                    method: isEdit ? 'PUT' : 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      ...(isEdit ? { testCaseId: editingTestCase._id } : {}),
-                      ...testCaseData,
-                      projectId,
-                    })
-                  })
-                  if (res.ok) {
-                    setTestCaseDialogOpen(false)
-                    setEditingTestCase(null)
-                    setCreateCaseSuiteId(undefined)
-                    setTestCasesRefreshCounter(c => c + 1)
-                    if (detailSuiteId) {
-                      setSuiteDetailRefreshKey(k => k + 1)
-                      setSuiteDetailDialogOpen(true)
-                    }
-                  } else {
-                    const data = await res.json().catch(() => ({}))
-                    console.error('Failed to save test case', data)
-                  }
-                } catch (e) {
-                  console.error('Error saving test case:', e)
-                } finally {
-                  setTestCaseSaving(false)
-                }
-              }}
-              onCancel={() => {
-                setTestCaseDialogOpen(false)
-                setEditingTestCase(null)
-                setCreateCaseSuiteId(undefined)
-                if (detailSuiteId) {
-                  setSuiteDetailDialogOpen(true)
-                }
-              }}
-              loading={testCaseSaving}
-            />
-          </ResponsiveDialog>
+          <DeleteConfirmDialog
+            isOpen={testCaseDeleteDialogOpen}
+            onClose={() => {
+              setTestCaseDeleteDialogOpen(false)
+              setTestCaseDeleteItem(null)
+            }}
+            onConfirm={handleConfirmDeleteTestCase}
+            title="Delete Test Case"
+            itemName={testCaseDeleteItem?.name || 'this test case'}
+            itemType="Test Case"
+            loading={testCaseDeleting}
+          />
 
           <TestSuiteDetailDialog
             suiteId={detailSuiteId}
@@ -2322,7 +2485,7 @@ export default function ProjectDetailPage() {
               setParentSuiteIdForCreate(undefined)
               setSuiteDialogOpen(true)
             }}
-            onDelete={(suiteId) => {
+            onDelete={() => {
               setSuiteDetailDialogOpen(false)
               // Refresh suites tree
               setSuitesRefreshCounter(c => c + 1)
@@ -2335,9 +2498,9 @@ export default function ProjectDetailPage() {
             }}
             onCreateTestCase={(suiteId) => {
               setSuiteDetailDialogOpen(false)
-              setEditingTestCase(null)
-              setCreateCaseSuiteId(suiteId)
-              setTestCaseDialogOpen(true)
+              const qp = new URLSearchParams({ projectId })
+              if (suiteId) qp.set('testSuiteId', suiteId)
+              router.push(`/test-management/cases/new?${qp.toString()}`)
             }}
             onChildSuiteClick={(childSuiteId) => {
               setDetailSuiteId(childSuiteId)
@@ -2418,7 +2581,7 @@ export default function ProjectDetailPage() {
             onConfirm={async () => {
               if (selectedTask) {
                 try {
-                  const response = await fetch(`/api/tasks/${selectedTask._id}`, {
+                  const response = await fetch(`/api/tasks/${selectedTask._id.toString()}`, {
                     method: 'DELETE'
                   })
 
@@ -2465,11 +2628,41 @@ export default function ProjectDetailPage() {
             }}
           />
 
+          <AddIncomeDialog
+            open={!!editingIncome}
+            onClose={() => setEditingIncome(null)}
+            projectId={projectId}
+            income={editingIncome
+              ? {
+                ...editingIncome,
+                attachments: editingIncome.attachments?.map((att) => ({
+                  ...att,
+                  uploadedBy: resolveUploadedById(att.uploadedBy)
+                }))
+              }
+              : null}
+            onSuccess={() => {
+              notifySuccess({ title: 'Income Updated', message: 'Income has been updated successfully' })
+              fetchIncomes()
+            }}
+          />
+
           <AddExpenseDialog
             open={!!editingExpense}
             onClose={() => setEditingExpense(null)}
             projectId={projectId}
-            expense={editingExpense}
+            expense={editingExpense
+              ? {
+                ...editingExpense,
+                paidBy: typeof editingExpense.paidBy === 'string'
+                  ? editingExpense.paidBy
+                  : (editingExpense.paidBy ? `${editingExpense.paidBy.firstName} ${editingExpense.paidBy.lastName}` : undefined),
+                attachments: editingExpense.attachments?.map((att) => ({
+                  ...att,
+                  uploadedBy: resolveUploadedById(att.uploadedBy)
+                }))
+              }
+              : undefined}
             onSuccess={() => {
               notifySuccess({ title: 'Expense Updated', message: 'Expense has been updated successfully' })
               fetchExpenses()
@@ -2478,6 +2671,7 @@ export default function ProjectDetailPage() {
           />
 
           {/* Delete Expense Confirmation Modal */}
+
           <ConfirmationModal
             isOpen={showDeleteExpenseConfirmModal}
             onClose={() => {
@@ -2487,10 +2681,11 @@ export default function ProjectDetailPage() {
             onConfirm={confirmDeleteExpense}
             title="Delete Expense"
             description={`Are you sure you want to delete "${expenseToDelete?.name}"? This action cannot be undone.`}
-            confirmText="Delete Expense"
+            confirmText="Delete"
             cancelText="Cancel"
             variant="destructive"
           />
+
         </div>
       </MainLayout>
     </TooltipProvider>

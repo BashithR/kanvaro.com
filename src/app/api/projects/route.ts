@@ -8,6 +8,7 @@ import { authenticateUser } from '@/lib/auth-utils'
 import { PermissionService } from '@/lib/permissions/permission-service'
 import { Permission } from '@/lib/permissions/permission-definitions'
 import { notificationService } from '@/lib/notification-service'
+import { logActivity } from '@/lib/activity-logger'
 
 // In-memory cache for request deduplication
 const pendingRequests = new Map<string, Promise<any>>()
@@ -358,6 +359,22 @@ export async function POST(request: NextRequest) {
         message: 'Project created successfully',
         data: project.toObject()
       }
+
+      // Log activity: project created (non-blocking)
+      logActivity({
+        organizationId: String(organizationId),
+        userId,
+        action: 'project_created',
+        entityType: 'project',
+        entityId: String(project._id),
+        entityName: name || 'Untitled Project',
+        projectId: String(project._id),
+        projectName: name || 'Untitled Project',
+        details: {
+          status: status || 'planning',
+          teamMemberCount: teamMembers?.length || 0
+        }
+      }).catch(err => console.error('Failed to log project creation activity:', err))
  let baseUrl: string
         
         // First, check if NEXT_PUBLIC_APP_URL is explicitly set (recommended for all environments)

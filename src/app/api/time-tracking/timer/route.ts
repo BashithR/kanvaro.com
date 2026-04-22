@@ -7,8 +7,7 @@ import { Project } from '@/models/Project'
 import { User } from '@/models/User'
 import { Organization } from '@/models/Organization'
 import { applyRoundingRules } from '@/lib/utils'
-import { notificationService } from '@/lib/notification-service'
-import { isNotificationEnabled } from '@/lib/notification-utils'
+import { logActivity } from '@/lib/activity-logger'
 
 type EffectiveTimeTrackingSettings = {
   maxSessionHours?: number
@@ -127,26 +126,6 @@ interface StopTimerOptions {
   now?: Date
 }
 
-const buildNotificationPayload = (
-  title: string,
-  message: string,
-  timeEntryId: string,
-  projectUrl: string
-) => ({
-  type: 'time_tracking' as const,
-  title,
-  message,
-  data: {
-    entityType: 'time_entry' as const,
-    entityId: timeEntryId,
-    action: 'updated' as const,
-    priority: 'low' as const,
-    url: projectUrl
-  },
-  sendEmail: false,
-  sendPush: false
-})
-
 async function stopTimerAndBuildResponse(
   activeTimer: IActiveTimer,
   options: StopTimerOptions = {}
@@ -238,7 +217,21 @@ async function stopTimerAndBuildResponse(
   const hasTimeLogged = finalDuration > 0
 
   if (!hasTimeLogged) {
-    await ActiveTimer.findByIdAndDelete(activeTimer._id)
+    // Atomically claim the timer — only the first caller succeeds
+    const deletedTimer = await ActiveTimer.findOneAndDelete({ _id: activeTimer._id })
+    if (!deletedTimer) {
+      // Another process already stopped this timer — bail out
+      return {
+        status: 200,
+        body: {
+          message: 'Timer already stopped by another process',
+          timeEntry: null,
+          hasTimeLogged: false,
+          duration: 0,
+          alreadyStopped: true
+        }
+      }
+    }
     return {
       status: 200,
       body: {
@@ -263,7 +256,6 @@ async function stopTimerAndBuildResponse(
     }
   }
 
-  const requiresApproval = stopSettings.requireApproval ?? false
   const category = options.category ?? activeTimer.category
   const tags = options.tags ?? activeTimer.tags
   const projectValue = (activeTimer.project as any)?._id ?? activeTimer.project
@@ -293,160 +285,28 @@ async function stopTimerAndBuildResponse(
     isApproved: !requiresProjectApproval
   })
 
-  await timeEntry.save()
-  await ActiveTimer.findByIdAndDelete(activeTimer._id)
-
-  const hoursLogged = finalDuration / MINUTES_PER_HOUR
-  const isOvertime =
-    stopSettings.allowOvertime === false &&
-    (hoursLogged > (stopSettings.maxDailyHours || 8) ||
-      hoursLogged > (stopSettings.maxWeeklyHours || 40))
-
-  // Only send notifications if time was actually logged
-  // Notifications should only be sent when timer stops with logged time
-  const project = projectValue ? await Project.findById(projectValue).select('name settings') : null
-  const projectName = project?.name || 'Unknown Project'
-  const hoursFormatted = `${Math.floor(hoursLogged)}h ${Math.round((hoursLogged % 1) * 60)}m`
-  
-  // Get base URL for absolute links
-  let baseUrl: string
-  if (process.env.NEXT_PUBLIC_APP_URL) {
-    baseUrl = process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')
-  } else {
-    // Fallback to localhost for development
-    baseUrl = 'http://localhost:3000'
+  // Atomically claim the timer — only the first caller succeeds
+  const deletedTimer = await ActiveTimer.findOneAndDelete({ _id: activeTimer._id })
+  if (!deletedTimer) {
+    // Another process already stopped this timer — bail out without creating duplicate
+    return {
+      status: 200,
+      body: {
+        message: 'Timer already stopped by another process',
+        timeEntry: null,
+        hasTimeLogged: false,
+        duration: 0,
+        alreadyStopped: true
+      }
+    }
   }
-  const projectUrl = `${baseUrl}/time-tracking/logs`
-  
-  // Check if the formatted duration is "0h 0m" (even if hasTimeLogged is true due to seconds)
-  // We don't want to spam users with 0h 0m notifications
-  const isZeroDurationDisplay = hoursFormatted === '0h 0m'
+  await timeEntry.save()
 
   const notificationsSent = {
     timerStop: false,
     overtime: false,
     approvalNeeded: false,
     timeSubmitted: false
-  }
-
-  // Only send notifications if time was logged (hasTimeLogged is already checked above)
-  // Timer Stop notification - only when timer is stopped
-  const timerStopEnabled = await isNotificationEnabled(
-    organizationId,
-    'onTimerStop',
-    projectValue?.toString()
-  )
-  
-  if (timerStopEnabled && hasTimeLogged && !isZeroDurationDisplay) {
-    const autoStopTitle = isAutoStop ? 'Timer Auto-Stopped' : 'Timer Stopped'
-    const autoStopMsg = isAutoStop
-      ? (options.reason === 'auto_max_daily'
-        ? `Timer auto-stopped for project "${projectName}" after reaching the daily hours limit. Logged ${hoursFormatted}.`
-        : `Timer auto-stopped for project "${projectName}" after reaching the session limit. Logged ${hoursFormatted}.`)
-      : `Timer stopped for project "${projectName}". Logged ${hoursFormatted}.`
-    await notificationService.createNotification(
-      userId!,
-      organizationId,
-      buildNotificationPayload(
-        autoStopTitle,
-        autoStopMsg,
-        timeEntry._id.toString(),
-        projectUrl
-      )
-    )
-    notificationsSent.timerStop = true
-  }
-
-  // Overtime notification - only if overtime detected
-  if (isOvertime && hasTimeLogged) {
-    const overtimeEnabled = await isNotificationEnabled(
-      organizationId,
-      'onOvertime',
-      projectValue?.toString()
-    )
-    if (overtimeEnabled) {
-      await notificationService.createNotification(
-        userId!,
-        organizationId,
-        {
-          type: 'time_tracking' as const,
-          title: 'Overtime Alert',
-          message: `Overtime detected: ${hoursFormatted} logged for project "${projectName}". This exceeds the daily/weekly limit.`,
-          data: {
-            entityType: 'time_entry' as const,
-            entityId: timeEntry._id.toString(),
-            action: 'updated' as const,
-            priority: 'high' as const,
-            url: projectUrl
-          },
-          sendEmail: false,
-          sendPush: false
-        }
-      )
-      notificationsSent.overtime = true
-    }
-  }
-
-  // Approval Required  notification - only if approval is required AND time was logged
- 
-const projectRequiresApproval = project?.settings?.requireApproval === true;
-  if (projectRequiresApproval && hasTimeLogged && !isZeroDurationDisplay) {
-    const approvalNeededEnabled = await isNotificationEnabled(
-      organizationId,
-      'onApprovalNeeded',
-      projectValue?.toString()
-    )
-    if (approvalNeededEnabled) {
-      await notificationService.createNotification(
-        userId!,
-        organizationId,
-        {
-          type: 'time_tracking' as const,
-          title: 'Approval Required',
-          message: `Time entry for project "${projectName}" (${hoursFormatted}) requires approval.`,
-          data: {
-            entityType: 'time_entry' as const,
-            entityId: timeEntry._id.toString(),
-            action: 'updated' as const,
-            priority: 'medium' as const,
-            url: projectUrl
-          },
-          sendEmail: false,
-          sendPush: false
-        }
-      )
-      notificationsSent.approvalNeeded = true
-    }
-  }
-
-  // Time Submitted notification - only if no approval required AND time was logged
-  if (!requiresApproval && hasTimeLogged && !isZeroDurationDisplay) {
-    const timeSubmittedEnabled = await isNotificationEnabled(
-      organizationId,
-      'onTimeSubmitted',
-      projectValue?.toString()
-    )
-    if (timeSubmittedEnabled) {
-      await notificationService.createNotification(
-        userId!,
-        organizationId,
-        {
-          type: 'time_tracking' as const,
-          title: 'Time Submitted',
-          message: `Time entry for project "${projectName}" (${hoursFormatted}) has been submitted successfully.`,
-          data: {
-            entityType: 'time_entry' as const,
-            entityId: timeEntry._id.toString(),
-            action: 'created' as const,
-            priority: 'low' as const,
-            url: projectUrl
-          },
-          sendEmail: false,
-          sendPush: false
-        }
-      )
-      notificationsSent.timeSubmitted = true
-    }
   }
 
   return {
@@ -722,27 +582,20 @@ export async function POST(request: NextRequest) {
     await activeTimer.populate('project', 'name settings')
     await activeTimer.populate('task', 'title')
 
-    // Send timer start notification if enabled
-    const shouldNotifyStart = await isNotificationEnabled(organizationId, 'onTimerStart', projectId)
-    if (shouldNotifyStart) {
-      const project = await Project.findById(projectId).select('name')
-      const projectName = project?.name || 'Unknown Project'
-      
-      await notificationService.createNotification(userId, organizationId, {
-        type: 'time_tracking',
-        title: 'Timer Started',
-        message: `Timer started for project "${projectName}"${description ? `: ${description}` : ''}`,
-        data: {
-          entityType: 'time_entry',
-          entityId: activeTimer._id.toString(),
-          action: 'created',
-          priority: 'low',
-          url: `/time-tracking/timer`
-        },
-        sendEmail: false,
-        sendPush: false
-      })
-    }
+    // Log activity: timer started (non-blocking)
+    const projectNameForLog = (activeTimer.project as any)?.name || 'Unknown Project'
+    const taskTitleForLog = (activeTimer.task as any)?.title || undefined
+    logActivity({
+      organizationId: String(organizationId),
+      userId: String(userId),
+      action: 'timer_started',
+      entityType: 'timer',
+      entityId: String(activeTimer._id),
+      entityName: taskTitleForLog || projectNameForLog,
+      projectId: String(projectId),
+      projectName: projectNameForLog,
+      details: { taskTitle: taskTitleForLog, description: finalDescription }
+    }).catch(err => console.error('Failed to log timer start activity:', err))
 
     return NextResponse.json({
       message: 'Timer started successfully',
@@ -750,8 +603,7 @@ export async function POST(request: NextRequest) {
         ...activeTimer.toObject(),
         currentDuration: 0,
         isPaused: false
-      },
-      notificationSent: shouldNotifyStart
+      }
     })
   } catch (error) {
     console.error('Error starting timer:', error)
@@ -779,12 +631,16 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'No active timer found' }, { status: 404 })
     }
 
-    const autoStopResult = await enforceTimerLimits(activeTimer)
-    if (autoStopResult) {
-      return NextResponse.json(autoStopResult.body, { status: autoStopResult.status })
-    }
+    // NOTE: enforceTimerLimits() removed from PUT handler to prevent race condition.
+    // When a user sends a 'stop' action, the stop logic itself handles limit capping.
+    // The GET handler and cron job still enforce limits independently.
 
     const now = new Date()
+
+    const timerProjectName = (activeTimer.project as any)?.name || 'Unknown Project'
+    const timerTaskTitle = (activeTimer.task as any)?.title || undefined
+    const timerOrgId = String(getIdString(activeTimer.organization) || organizationId)
+    const timerProjectId = getIdString(activeTimer.project) || undefined
 
     switch (action) {
       case 'pause':
@@ -792,6 +648,18 @@ export async function PUT(request: NextRequest) {
           return NextResponse.json({ error: 'Timer is already paused' }, { status: 400 })
         }
         activeTimer.pausedAt = now
+        // Log activity: timer paused (non-blocking)
+        logActivity({
+          organizationId: timerOrgId,
+          userId: String(userId),
+          action: 'timer_paused',
+          entityType: 'timer',
+          entityId: String(activeTimer._id),
+          entityName: timerTaskTitle || timerProjectName,
+          projectId: timerProjectId,
+          projectName: timerProjectName,
+          details: { taskTitle: timerTaskTitle }
+        }).catch(err => console.error('Failed to log timer pause activity:', err))
         break
 
       case 'resume':
@@ -801,6 +669,18 @@ export async function PUT(request: NextRequest) {
         const pausedDuration = (now.getTime() - activeTimer.pausedAt.getTime()) / (1000 * 60)
         activeTimer.totalPausedDuration += pausedDuration
         activeTimer.pausedAt = undefined
+        // Log activity: timer resumed (non-blocking)
+        logActivity({
+          organizationId: timerOrgId,
+          userId: String(userId),
+          action: 'timer_resumed',
+          entityType: 'timer',
+          entityId: String(activeTimer._id),
+          entityName: timerTaskTitle || timerProjectName,
+          projectId: timerProjectId,
+          projectName: timerProjectName,
+          details: { taskTitle: timerTaskTitle }
+        }).catch(err => console.error('Failed to log timer resume activity:', err))
         break
 
       case 'stop': {
@@ -810,6 +690,24 @@ export async function PUT(request: NextRequest) {
           tags,
           reason: 'manual'
         })
+        // Log activity: timer stopped (non-blocking)
+        if (stopResult.status === 200 && !stopResult.body.alreadyStopped) {
+          logActivity({
+            organizationId: timerOrgId,
+            userId: String(userId),
+            action: 'timer_stopped',
+            entityType: 'timer',
+            entityId: String(activeTimer._id),
+            entityName: timerTaskTitle || timerProjectName,
+            projectId: timerProjectId,
+            projectName: timerProjectName,
+            details: {
+              taskTitle: timerTaskTitle,
+              duration: stopResult.body.duration,
+              hasTimeLogged: stopResult.body.hasTimeLogged
+            }
+          }).catch(err => console.error('Failed to log timer stop activity:', err))
+        }
         return NextResponse.json(stopResult.body, { status: stopResult.status })
       }
 

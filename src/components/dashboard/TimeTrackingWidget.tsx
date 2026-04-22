@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/Dialog'
+import { useToast } from '@/components/ui/Toast'
 import { Timer } from '@/components/time-tracking/Timer'
 import { useOrganization } from '@/hooks/useOrganization'
 import { useDateTime } from '@/components/providers/DateTimeProvider'
@@ -51,6 +52,7 @@ export function TimeTrackingWidget({ userId, organizationId, timeStats: propTime
   const router = useRouter()
   const { organization } = useOrganization()
   const { formatDuration: formatDurationUtil } = useDateTime()
+  const { showToast } = useToast()
   const [activeTimer, setActiveTimer] = useState<ActiveTimer | null>(null)
   const [timeStats, setTimeStats] = useState<TimeStats | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -61,6 +63,14 @@ export function TimeTrackingWidget({ userId, organizationId, timeStats: propTime
   const baseMinutesRef = useRef<number>(0)
   const tickStartMsRef = useRef<number | null>(null)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  const truncateWords = (text: string, maxWords: number) => {
+    const trimmed = (text || '').trim()
+    if (!trimmed) return ''
+    const words = trimmed.split(/\s+/)
+    if (words.length <= maxWords) return trimmed
+    return `${words.slice(0, maxWords).join(' ')}…`
+  }
 
   const loadActiveTimer = useCallback(async () => {
     try {
@@ -241,6 +251,17 @@ export function TimeTrackingWidget({ userId, organizationId, timeStats: propTime
       }
       if (action === 'stop') {
         handleTimerUpdate(null)
+        const hasTimeLogged = data.hasTimeLogged && data.duration > 0
+        showToast({
+          type: hasTimeLogged ? 'success' : 'info',
+          title: 'Timer Stopped',
+          message:
+            data.message ||
+            (hasTimeLogged
+              ? 'Timer stopped successfully.'
+              : 'Timer stopped. No time was logged.'),
+          duration: 5000
+        })
       } else {
         setActiveTimer(data.activeTimer)
       }
@@ -288,7 +309,9 @@ export function TimeTrackingWidget({ userId, organizationId, timeStats: propTime
               {activeTimer.task && (
                 <div className="text-xs break-words">
                   <span className="font-semibold text-foreground">Task:</span>{' '}
-                  <span className="truncate">{activeTimer.task.title}</span>
+                  <span className="break-words whitespace-normal" title={activeTimer.task.title}>
+                    {activeTimer.task.title}
+                  </span>
                 </div>
               )}
               {activeTimer.description && (
@@ -297,8 +320,8 @@ export function TimeTrackingWidget({ userId, organizationId, timeStats: propTime
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span className="line-clamp-1">
-                          {activeTimer.description}
+                        <span className="break-words whitespace-normal" title={activeTimer.description}>
+                          {truncateWords(activeTimer.description, 5)}
                         </span>
                       </TooltipTrigger>
                       <TooltipContent>

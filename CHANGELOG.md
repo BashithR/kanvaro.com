@@ -1,3 +1,78 @@
+## [1.32.6](https://github.com/EchonLabs/kanvaro.com/compare/v1.32.5...v1.32.6) (2026-04-22)
+
+
+### Bug Fixes
+
+* update task interface and improve timer controls for assignees ([2ea9d32](https://github.com/EchonLabs/kanvaro.com/commit/2ea9d323662372b8b1dac9ee25e3000bb017830c))
+
+## [1.32.5](https://github.com/EchonLabs/kanvaro.com/compare/v1.32.4...v1.32.5) (2026-04-21)
+
+
+### Bug Fixes
+
+* update Swagger UI endpoint and add new API route for OpenAPI specification ([7a2f0f4](https://github.com/EchonLabs/kanvaro.com/commit/7a2f0f4ae1aefe88840834b74070022e2f31c3d6))
+
+## [1.32.4](https://github.com/EchonLabs/kanvaro.com/compare/v1.32.3...v1.32.4) (2026-04-21)
+
+
+### Bug Fixes
+
+* add sanitize-html dependency for improved HTML sanitization ([351d015](https://github.com/EchonLabs/kanvaro.com/commit/351d01507a8ce0c96a087f06ca3ce552a69ceeb8))
+
+## [1.32.3](https://github.com/EchonLabs/kanvaro.com/compare/v1.32.2...v1.32.3) (2026-04-21)
+
+
+### Bug Fixes
+
+* update local server URL to use HTTPS for development ([0ff3e46](https://github.com/EchonLabs/kanvaro.com/commit/0ff3e46c288426e8175daf4cf15579b5c3d5db73))
+
+## [1.32.2](https://github.com/EchonLabs/kanvaro.com/compare/v1.32.1...v1.32.2) (2026-04-21)
+
+
+### Bug Fixes
+
+* sanitize task descriptions and improve HTML handling in task components ([845e8bc](https://github.com/EchonLabs/kanvaro.com/commit/845e8bc135ff3df9c1057e6e063c2551a76a029d))
+
+## [1.32.1](https://github.com/EchonLabs/kanvaro.com/compare/v1.32.0...v1.32.1) (2026-04-20)
+
+
+### Bug Fixes
+
+* enforce task title word limit and improve timer management in task detail page ([852ab18](https://github.com/EchonLabs/kanvaro.com/commit/852ab184ba95b0c5e7861b2f03abc70532b9494a))
+
+# [1.32.0](https://github.com/EchonLabs/kanvaro.com/compare/v1.31.1...v1.32.0) (2026-04-20)
+
+
+### Features
+
+* enhance time tracking widget with word truncation and improved task description display ([9fddfcd](https://github.com/EchonLabs/kanvaro.com/commit/9fddfcd265e63e1e6a9ce0abb694a92bc53fbbc0))
+
+## [1.31.1](https://github.com/EchonLabs/kanvaro.com/compare/v1.31.0...v1.31.1) (2026-04-17)
+
+
+### Bug Fixes
+
+* add active timer functionality and improve timer management in task and time tracking components ([1762e4f](https://github.com/EchonLabs/kanvaro.com/commit/1762e4f2f0678664e4ed922e89d2e540b1e14a9b))
+
+# [1.31.0](https://github.com/EchonLabs/kanvaro.com/compare/v1.30.14...v1.31.0) (2026-04-16)
+
+
+### Bug Fixes
+
+* implement duplicate time entry cleanup script and deduplication safety net in TimeEntry model ([254bde2](https://github.com/EchonLabs/kanvaro.com/commit/254bde24db7833fe2186001fd490137cf1f62f5f))
+
+
+### Features
+
+* enhance TestPlanForm with rich text editor and test suite management ([c39d037](https://github.com/EchonLabs/kanvaro.com/commit/c39d037be6e3a02a768baed6c5ba54a17a2beda4))
+
+## [1.30.14](https://github.com/EchonLabs/kanvaro.com/compare/v1.30.13...v1.30.14) (2026-04-08)
+
+
+### Bug Fixes
+
+* Test management ([b05ba9a](https://github.com/EchonLabs/kanvaro.com/commit/b05ba9ae0af1b1b01344e041e2389830dfb6ede4))
+
 ## [1.30.13](https://github.com/EchonLabs/kanvaro.com/compare/v1.30.12...v1.30.13) (2026-04-07)
 
 

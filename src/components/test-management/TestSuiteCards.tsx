@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Folder, Eye, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { usePermissions } from '@/lib/permissions'
+import { Permission } from '@/lib/permissions/permission-definitions'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,9 +33,11 @@ interface TestSuiteCardsProps {
   onSuiteCreate?: (parentSuiteId?: string) => void
   onSuiteEdit?: (suite: TestSuite) => void
   onSuiteDelete?: (suiteId: string, suiteName: string) => void
+  /** If set, the list will navigate to and highlight this suite (no modal). */
+  highlightSuiteId?: string
 }
 
-const ITEMS_PER_PAGE = 6
+const ITEMS_PER_PAGE = 18
 
 export default function TestSuiteCards({
   projectId,
@@ -41,52 +45,69 @@ export default function TestSuiteCards({
   onSuiteCreate,
   onSuiteEdit,
   onSuiteDelete,
+  highlightSuiteId,
 }: TestSuiteCardsProps) {
   const [suites, setSuites] = useState<TestSuite[]>([])
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
-  const [userRole, setUserRole] = useState<string | null>(null)
-  const [loadingUserRole, setLoadingUserRole] = useState(true)
+  const lastHandledHighlightRef = useRef<string | null>(null)
+
+  const { hasPermission, loading: permissionsLoading } = usePermissions()
 
   useEffect(() => {
     fetchTestSuites()
-    fetchUserRole()
   }, [projectId])
 
-  const fetchUserRole = async () => {
-    try {
-      setLoadingUserRole(true)
-      const response = await fetch('/api/auth/me')
-      const data = await response.json()
-      if (response.ok && data.role) {
-        setUserRole(data.role)
-      }
-    } catch (error) {
-      console.error('Error fetching user role:', error)
-    } finally {
-      setLoadingUserRole(false)
-    }
-  }
-
-  const isAdmin = userRole && ['admin', 'super_admin', 'superadmin'].includes(userRole.toLowerCase())
+  const canDeleteSuite =
+    !!projectId &&
+    !permissionsLoading &&
+    hasPermission(Permission.TEST_SUITE_DELETE, projectId)
 
   const fetchTestSuites = async () => {
+    if (!projectId) {
+      setSuites([])
+      setCurrentPage(1)
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
       setCurrentPage(1)
-      const response = await fetch(`/api/test-suites?projectId=${projectId}`)
+      const response = await fetch(`/api/test-suites?projectId=${encodeURIComponent(projectId)}`)
       const data = await response.json()
 
       if (data.success && Array.isArray(data.data)) {
         // Flatten to show all suites, not hierarchical
         setSuites(data.data)
+      } else {
+        setSuites([])
       }
     } catch (error) {
       console.error('Error fetching test suites:', error)
+      setSuites([])
     } finally {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (!highlightSuiteId) return
+    if (lastHandledHighlightRef.current === highlightSuiteId) return
+    if (!suites || suites.length === 0) return
+
+    const idx = suites.findIndex((s) => s._id === highlightSuiteId)
+    if (idx < 0) return
+
+    const page = Math.floor(idx / ITEMS_PER_PAGE) + 1
+    setCurrentPage(page)
+    lastHandledHighlightRef.current = highlightSuiteId
+
+    setTimeout(() => {
+      const el = document.getElementById(`suite-${highlightSuiteId}`)
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 0)
+  }, [highlightSuiteId, suites])
 
   const totalPages = Math.ceil(suites.length / ITEMS_PER_PAGE)
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
@@ -150,7 +171,15 @@ export default function TestSuiteCards({
       {/* Grid of Suite Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {currentSuites.map((suite) => (
-          <Card key={suite._id} className="flex flex-col hover:shadow-lg transition-shadow overflow-hidden">
+          <Card
+            key={suite._id}
+            id={`suite-${suite._id}`}
+            className={`flex flex-col hover:shadow-lg transition-shadow overflow-hidden ${
+              highlightSuiteId && suite._id === highlightSuiteId
+                ? 'ring-2 ring-primary/30 border-primary/40'
+                : ''
+            }`}
+          >
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-2">
                 <CardTitle className="text-base font-semibold truncate flex-1">
@@ -176,7 +205,7 @@ export default function TestSuiteCards({
                         Edit
                       </DropdownMenuItem>
                     )}
-                    {onSuiteDelete && isAdmin && (
+                    {onSuiteDelete && canDeleteSuite && (
                       <DropdownMenuItem
                         onClick={() => onSuiteDelete(suite._id, suite.name)}
                         className="text-destructive"
@@ -185,10 +214,10 @@ export default function TestSuiteCards({
                         Delete
                       </DropdownMenuItem>
                     )}
-                    {onSuiteDelete && !isAdmin && (
+                    {onSuiteDelete && !canDeleteSuite && (
                       <DropdownMenuItem disabled className="text-muted-foreground">
                         <Trash2 className="h-4 w-4 mr-2" />
-                        Delete (Admin only)
+                        Delete (No permission)
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>

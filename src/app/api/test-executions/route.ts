@@ -3,6 +3,8 @@ import { connectDB } from '@/lib/db-config'
 import { TestExecution, TestCase, TestPlan, Project } from '@/models'
 // import { getServerSession } from 'next-auth'
 import { authenticateUser } from '@/lib/auth-utils'
+import { hasTestPermission } from '@/lib/permissions/test-permission-helper'
+import { Permission } from '@/lib/permissions/permission-definitions'
 
 export async function GET(req: NextRequest) {
   try {
@@ -32,8 +34,8 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ success: false, error: 'Project not found' }, { status: 404 })
       }
       const userIdStr = (authResult as any)?.user?.id?.toString?.() || String((authResult as any)?.user?.id)
-      const roleStr = (authResult as any)?.user?.role ?? (authResult as any)?.role
-      const isAdmin = typeof roleStr === 'string' && ['admin', 'super_admin', 'superadmin'].includes(roleStr.toLowerCase())
+      const roleStr = (((authResult as any)?.user?.role ?? (authResult as any)?.role) || '').toString()
+      const hasRolePerm = await hasTestPermission(userIdStr, roleStr, Permission.TEST_EXECUTION_READ)
       const createdByStr = project?.createdBy?.toString?.()
       const teamHasUser = Array.isArray(project?.teamMembers)
         ? project.teamMembers.some((m: any) => m?.toString?.() === userIdStr)
@@ -43,7 +45,7 @@ export async function GET(req: NextRequest) {
             (role: any) => role?.user?.toString?.() === userIdStr && ['project_manager', 'project_qa_lead', 'project_tester'].includes(role.role)
           )
         : false
-      const hasAccess = !!project && (isAdmin || createdByStr === userIdStr || teamHasUser || roleHasUser)
+      const hasAccess = hasRolePerm || (!!project && (createdByStr === userIdStr || teamHasUser || roleHasUser))
       if (!hasAccess) {
         return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 })
       }
@@ -142,8 +144,8 @@ export async function POST(req: NextRequest) {
 
     const project = await Project.findById(testCase.project)
     const userIdStr = (authResult as any)?.user?.id?.toString?.() || String((authResult as any)?.user?.id)
-    const roleStr = (authResult as any)?.user?.role ?? (authResult as any)?.role
-    const isAdmin = typeof roleStr === 'string' && ['admin', 'super_admin', 'superadmin'].includes(roleStr.toLowerCase())
+    const roleStr = (((authResult as any)?.user?.role ?? (authResult as any)?.role) || '').toString()
+    const hasRolePerm = await hasTestPermission(userIdStr, roleStr, Permission.TEST_EXECUTION_CREATE)
     const createdByStr = project?.createdBy?.toString?.()
     const teamHasUser = Array.isArray(project?.teamMembers)
       ? project.teamMembers.some((m: any) => m?.toString?.() === userIdStr)
@@ -153,7 +155,7 @@ export async function POST(req: NextRequest) {
           (role: any) => role?.user?.toString?.() === userIdStr && ['project_manager', 'project_qa_lead', 'project_tester'].includes(role.role)
         )
       : false
-    const hasAccess = !!project && (isAdmin || createdByStr === userIdStr || teamHasUser || roleHasUser)
+    const hasAccess = hasRolePerm || (!!project && (createdByStr === userIdStr || teamHasUser || roleHasUser))
 
     if (!hasAccess) {
       return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 })

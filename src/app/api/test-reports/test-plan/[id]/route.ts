@@ -3,6 +3,8 @@ import { connectDB } from '@/lib/db-config'
 import { TestExecution, TestPlan, TestCase, Project } from '@/models'
 // import { getServerSession } from 'next-auth'
 import { authenticateUser } from '@/lib/auth-utils'
+import { hasTestPermission } from '@/lib/permissions/test-permission-helper'
+import { Permission } from '@/lib/permissions/permission-definitions'
 
 export async function GET(
   req: NextRequest,
@@ -28,14 +30,17 @@ export async function GET(
     }
 
     const project = await Project.findById(testPlan.project)
-    const hasAccess = project && (
+    const userIdStr = authResult.user.id?.toString?.() || String(authResult.user.id)
+    const roleStr = (authResult.user.role || '').toString()
+    const hasRolePerm = await hasTestPermission(userIdStr, roleStr, Permission.TEST_REPORT_VIEW)
+    const hasAccess = hasRolePerm || (project && (
       project.teamMembers.includes(authResult.user.id) || 
       project.createdBy.toString() === authResult.user.id ||
       project.projectRoles.some((role: any) => 
         role.user.toString() === authResult.user.id && 
         ['project_manager', 'project_qa_lead', 'project_tester'].includes(role.role)
       )
-    )
+    ))
 
     if (!hasAccess) {
       return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 })

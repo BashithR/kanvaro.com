@@ -314,7 +314,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.REPORTING_EXPORT,
     Permission.REPORTING_SHARE,
     Permission.TIME_LOG_REPORT_ACCESS,
-   Permission.REPORTING_VIEW,
+    Permission.REPORTING_VIEW,
 
     // Settings
     Permission.SETTINGS_VIEW,
@@ -537,26 +537,26 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.BACKLOG_MANAGE,
 
     // Test Management
-    Permission.TEST_SUITE_CREATE,
-    Permission.TEST_SUITE_READ,
-    Permission.TEST_SUITE_UPDATE,
-    Permission.TEST_SUITE_DELETE,
-    Permission.TEST_CASE_CREATE,
-    Permission.EPIC_VIEW_ALL,
-    Permission.TEST_CASE_READ,
-    Permission.TEST_CASE_UPDATE,
-    Permission.TEST_CASE_DELETE,
-    Permission.TEST_PLAN_CREATE,
-    Permission.TEST_PLAN_READ,
-    Permission.TEST_PLAN_UPDATE,
-    Permission.TEST_PLAN_DELETE,
-    Permission.TEST_PLAN_MANAGE,
-    Permission.TEST_EXECUTION_CREATE,
-    Permission.TEST_EXECUTION_READ,
-    Permission.TEST_EXECUTION_UPDATE,
-    Permission.SPRINT_VIEW_ALL,
-    Permission.TEST_REPORT_VIEW,
-    Permission.TEST_REPORT_EXPORT,
+    // Permission.TEST_SUITE_CREATE,
+    // Permission.TEST_SUITE_READ,
+    // Permission.TEST_SUITE_UPDATE,
+    // Permission.TEST_SUITE_DELETE,
+    // Permission.TEST_CASE_CREATE,
+    // Permission.EPIC_VIEW_ALL,
+    // Permission.TEST_CASE_READ,
+    // Permission.TEST_CASE_UPDATE,
+    // Permission.TEST_CASE_DELETE,
+    // Permission.TEST_PLAN_CREATE,
+    // Permission.TEST_PLAN_READ,
+    // Permission.TEST_PLAN_UPDATE,
+    // Permission.TEST_PLAN_DELETE,
+    // Permission.TEST_PLAN_MANAGE,
+    // Permission.TEST_EXECUTION_CREATE,
+    // Permission.TEST_EXECUTION_READ,
+    // Permission.TEST_EXECUTION_UPDATE,
+    // Permission.SPRINT_VIEW_ALL,
+    // Permission.TEST_REPORT_VIEW,
+    // Permission.TEST_REPORT_EXPORT,
 
     // Documentation
     Permission.DOCUMENTATION_VIEW,
@@ -607,6 +607,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.TASK_VIEW_ALL,
     Permission.TASK_EDIT_ALL,
 
+    Permission.TASK_EDIT_ALL,
+
 
     // Team
     Permission.TEAM_READ,
@@ -640,7 +642,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.FINANCIAL_MANAGE_PAYMENTS,
 
     //testing
-    Permission.TEST_MANAGE,
+    // Permission.TEST_MANAGE,
 
 
     // Reporting
@@ -706,24 +708,24 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.BACKLOG_MANAGE,
 
     // Test management
-    Permission.TEST_SUITE_CREATE,
-    Permission.TEST_SUITE_READ,
-    Permission.TEST_SUITE_UPDATE,
+    // Permission.TEST_SUITE_CREATE,
+    // Permission.TEST_SUITE_READ,
+    // Permission.TEST_SUITE_UPDATE,
     // Permission.TEST_SUITE_DELETE,
-    Permission.TEST_CASE_CREATE,
-    Permission.TEST_CASE_READ,
-    Permission.TEST_CASE_UPDATE,
-    Permission.TEST_CASE_DELETE,
-    Permission.TEST_PLAN_CREATE,
-    Permission.TEST_PLAN_READ,
-    Permission.TEST_PLAN_UPDATE,
-    Permission.TEST_PLAN_DELETE,
-    Permission.TEST_PLAN_MANAGE,
-    Permission.TEST_EXECUTION_CREATE,
-    Permission.TEST_EXECUTION_READ,
-    Permission.TEST_EXECUTION_UPDATE,
-    Permission.TEST_REPORT_VIEW,
-    Permission.TEST_REPORT_EXPORT,
+    // Permission.TEST_CASE_CREATE,
+    // Permission.TEST_CASE_READ,
+    // Permission.TEST_CASE_UPDATE,
+    // Permission.TEST_CASE_DELETE,
+    // Permission.TEST_PLAN_CREATE,
+    // Permission.TEST_PLAN_READ,
+    // Permission.TEST_PLAN_UPDATE,
+    // Permission.TEST_PLAN_DELETE,
+    // Permission.TEST_PLAN_MANAGE,
+    // Permission.TEST_EXECUTION_CREATE,
+    // Permission.TEST_EXECUTION_READ,
+    // Permission.TEST_EXECUTION_UPDATE,
+    // Permission.TEST_REPORT_VIEW,
+    // Permission.TEST_REPORT_EXPORT,
 
     // Documentation
     Permission.DOCUMENTATION_VIEW,
@@ -754,6 +756,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
 
     // Team (read only)
     Permission.TEAM_READ,
+    Permission.TEAM_VIEW_ACTIVITY,
+
 
     // Time tracking (own time)
     Permission.TIME_TRACKING_CREATE,
@@ -962,7 +966,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.TEST_SUITE_CREATE,
     Permission.TEST_SUITE_READ,
     Permission.TEST_SUITE_UPDATE,
-    // Permission.TEST_SUITE_DELETE,
+    Permission.TEST_SUITE_DELETE,
     Permission.TEST_CASE_CREATE,
     Permission.TEST_CASE_READ,
     Permission.TEST_CASE_UPDATE,
@@ -1179,7 +1183,7 @@ export const PROJECT_ROLE_PERMISSIONS: Record<ProjectRole, Permission[]> = {
     Permission.TEST_SUITE_CREATE,
     Permission.TEST_SUITE_READ,
     Permission.TEST_SUITE_UPDATE,
-    // Permission.TEST_SUITE_DELETE,
+    Permission.TEST_SUITE_DELETE,
     Permission.TEST_CASE_CREATE,
     Permission.TEST_CASE_READ,
     Permission.TEST_CASE_UPDATE,
@@ -1215,6 +1219,7 @@ export const PROJECT_ROLE_PERMISSIONS: Record<ProjectRole, Permission[]> = {
     Permission.BACKLOG_READ,
     // Test management (execution and reporting only)
     Permission.TEST_SUITE_READ,
+    Permission.TEST_SUITE_DELETE,
     Permission.TEST_CASE_READ,
     Permission.TEST_PLAN_READ,
     Permission.TEST_EXECUTION_CREATE,

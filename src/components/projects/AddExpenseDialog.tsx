@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/Dialog'
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/label'
@@ -9,19 +9,49 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/Badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, Upload, X, File, Image, Paperclip, AlertCircle, DollarSign, Calendar, Tag, CreditCard } from 'lucide-react'
+import { Loader2, Upload, X, File, Image as ImageIcon, Paperclip, DollarSign, Calendar, Tag, CreditCard } from 'lucide-react'
 import { useOrganization } from '@/hooks/useOrganization'
 import { useToast } from '@/components/ui/Toast'
 import { useNotify } from '@/lib/notify'
 import { cn } from '@/lib/utils'
+
+type ExpenseCategory = 'labor' | 'materials' | 'overhead' | 'external' | 'other'
+type PaidStatus = 'paid' | 'unpaid'
+
+interface ExpenseAttachment {
+  name: string
+  url: string
+  size: number
+  type: string
+  uploadedAt?: string
+  uploadedBy?: string
+}
+
+interface ExpenseLike {
+  _id?: string
+  name?: string
+  description?: string
+  unitPrice?: number
+  quantity?: number
+  fullAmount?: number
+  expenseDate?: string | Date
+  category?: ExpenseCategory
+  isBillable?: boolean
+  paidStatus?: PaidStatus
+  paidBy?: string
+  attachments?: ExpenseAttachment[]
+}
+
+const isExpenseCategory = (value: string): value is ExpenseCategory => {
+  return value === 'labor' || value === 'materials' || value === 'overhead' || value === 'external' || value === 'other'
+}
 
 interface AddExpenseDialogProps {
   open: boolean
   onClose: () => void
   projectId: string
   onSuccess: () => void
-  expense?: any // Optional expense object for editing
+  expense?: ExpenseLike // Optional expense object for editing
 }
 
 interface ExpenseFormData {
@@ -31,18 +61,11 @@ interface ExpenseFormData {
   quantity: string
   fullAmount: string
   expenseDate: string
-  category: 'labor' | 'materials' | 'overhead' | 'external' | 'other'
+  category: ExpenseCategory
   isBillable: boolean
-  paidStatus: 'paid' | 'unpaid'
+  paidStatus: PaidStatus
   paidBy: string
-  attachments: Array<{
-    name: string
-    url: string
-    size: number
-    type: string
-    uploadedAt?: string
-    uploadedBy?: string
-  }>
+  attachments: ExpenseAttachment[]
 }
 
 export function AddExpenseDialog({ open, onClose, projectId, onSuccess, expense }: AddExpenseDialogProps) {
@@ -296,11 +319,12 @@ export function AddExpenseDialog({ open, onClose, projectId, onSuccess, expense 
         duration: 3000
       })
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Upload error:', err)
+      const message = err instanceof Error ? err.message : 'Failed to upload files. Please try again.'
       notifyError({
         title: 'Upload Failed',
-        message: err.message || 'Failed to upload files. Please try again.'
+        message
       })
     } finally {
       setUploading(false)
@@ -329,7 +353,7 @@ export function AddExpenseDialog({ open, onClose, projectId, onSuccess, expense 
       setLoading(true)
 
       const requestBody = {
-        ...(expense && { expenseId: expense._id }), // Include expenseId for updates
+        ...(expense?._id ? { expenseId: expense._id } : {}), // Include expenseId for updates
         name: formData.name,
         description: formData.description,
         unitPrice: parseFloat(formData.unitPrice),
@@ -355,9 +379,11 @@ export function AddExpenseDialog({ open, onClose, projectId, onSuccess, expense 
         body: JSON.stringify(requestBody)
       })
 
-      const data = await response.json()
+      const data: unknown = await response.json()
 
-      if (data.success) {
+      const responseBody = data as { success?: boolean; error?: string }
+
+      if (responseBody.success) {
         showToast({
           title: expense ? 'Expense Updated' : 'Expense Added',
           message: expense ? 'Expense has been updated successfully' : 'Expense has been added successfully',
@@ -385,13 +411,14 @@ export function AddExpenseDialog({ open, onClose, projectId, onSuccess, expense 
       } else {
         notifyError({
           title: expense ? 'Failed to Update Expense' : 'Failed to Add Expense',
-          message: data.error || `Failed to ${expense ? 'update' : 'add'} expense. Please try again.`
+          message: responseBody.error || `Failed to ${expense ? 'update' : 'add'} expense. Please try again.`
         })
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : `Failed to ${expense ? 'update' : 'add'} expense. Please try again.`
       notifyError({
         title: expense ? 'Failed to Update Expense' : 'Failed to Add Expense',
-        message: err.message || `Failed to ${expense ? 'update' : 'add'} expense. Please try again.`
+        message
       })
     } finally {
       setLoading(false)
@@ -400,7 +427,12 @@ export function AddExpenseDialog({ open, onClose, projectId, onSuccess, expense 
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0 bg-background/95 backdrop-blur-xl border-border/50 shadow-2xl">
+      <DialogContent
+        className="max-w-3xl max-h-[90vh] p-0 gap-0 bg-background/95 backdrop-blur-xl border-border/50 shadow-2xl"
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader className="p-6 border-b border-border/50 bg-muted/20">
           <DialogTitle className="text-xl font-semibold flex items-center gap-2">
             <div className="p-2 rounded-lg bg-primary/10 text-primary">
@@ -413,8 +445,8 @@ export function AddExpenseDialog({ open, onClose, projectId, onSuccess, expense 
           </DialogDescription>
         </DialogHeader>
 
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-8">
+        <form onSubmit={handleSubmit} className="flex flex-col min-h-0">
+          <DialogBody className="px-6 py-6 space-y-8">
           {/* Basic Information Section */}
           <div className="space-y-4">
             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
@@ -425,7 +457,11 @@ export function AddExpenseDialog({ open, onClose, projectId, onSuccess, expense 
                 <Label htmlFor="category" className="text-sm font-medium">Category <span className="text-destructive">*</span></Label>
                 <Select
                   value={formData.category}
-                  onValueChange={(value: any) => setFormData(prev => ({ ...prev, category: value }))}
+                  onValueChange={(value) => {
+                    if (isExpenseCategory(value)) {
+                      setFormData(prev => ({ ...prev, category: value }))
+                    }
+                  }}
                 >
                   <SelectTrigger className="h-10">
                     <SelectValue />
@@ -742,7 +778,7 @@ export function AddExpenseDialog({ open, onClose, projectId, onSuccess, expense 
                           <div className="flex items-center space-x-3 overflow-hidden">
                             <div className="p-2 rounded-md bg-muted">
                               {attachment.type.startsWith('image/') ? (
-                                <Image className="h-4 w-4 text-muted-foreground" />
+                                <ImageIcon className="h-4 w-4 text-muted-foreground" />
                               ) : (
                                 <File className="h-4 w-4 text-muted-foreground" />
                               )}
@@ -774,7 +810,9 @@ export function AddExpenseDialog({ open, onClose, projectId, onSuccess, expense 
             )}
           </div>
 
-          <div className="flex justify-end space-x-3 pt-6 border-t border-border/50">
+          </DialogBody>
+
+          <DialogFooter className="border-t border-border/50 px-6 py-6">
             <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
               Cancel
             </Button>
@@ -797,7 +835,7 @@ export function AddExpenseDialog({ open, onClose, projectId, onSuccess, expense 
                 expense ? 'Update Expense' : 'Add Expense'
               )}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

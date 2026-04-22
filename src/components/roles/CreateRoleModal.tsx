@@ -179,6 +179,55 @@ const PERMISSION_GROUPS: PermissionGroup[] = [
       { permission: Permission.SETTINGS_MANAGE_DATABASE, label: 'Manage Database', description: 'Manage database settings' },
       { permission: Permission.SETTINGS_MANAGE_SECURITY, label: 'Manage Security', description: 'Manage security settings' }
     ]
+  },
+  {
+    category: PermissionCategory.TEST_MANAGEMENT,
+    permissions: [
+      { permission: Permission.TEST_SUITE_CREATE, label: 'Create Test Suites', description: 'Create new test suites' },
+      { permission: Permission.TEST_SUITE_READ, label: 'View Test Suites', description: 'View test suite information' },
+      { permission: Permission.TEST_SUITE_UPDATE, label: 'Edit Test Suites', description: 'Edit test suite details' },
+      { permission: Permission.TEST_SUITE_DELETE, label: 'Delete Test Suites', description: 'Delete test suites' },
+      { permission: Permission.TEST_CASE_CREATE, label: 'Create Test Cases', description: 'Create new test cases' },
+      { permission: Permission.TEST_CASE_READ, label: 'View Test Cases', description: 'View test case information' },
+      { permission: Permission.TEST_CASE_UPDATE, label: 'Edit Test Cases', description: 'Edit test case details' },
+      { permission: Permission.TEST_CASE_DELETE, label: 'Delete Test Cases', description: 'Delete test cases' },
+      { permission: Permission.TEST_PLAN_CREATE, label: 'Create Test Plans', description: 'Create new test plans' },
+      { permission: Permission.TEST_PLAN_READ, label: 'View Test Plans', description: 'View test plan information' },
+      { permission: Permission.TEST_PLAN_UPDATE, label: 'Edit Test Plans', description: 'Edit test plan details' },
+      { permission: Permission.TEST_PLAN_DELETE, label: 'Delete Test Plans', description: 'Delete test plans' },
+      { permission: Permission.TEST_PLAN_MANAGE, label: 'Manage Test Plans', description: 'Manage test plan settings and assignments' },
+      { permission: Permission.TEST_EXECUTION_CREATE, label: 'Create Test Executions', description: 'Execute test cases' },
+      { permission: Permission.TEST_EXECUTION_READ, label: 'View Test Executions', description: 'View test execution results' },
+      { permission: Permission.TEST_EXECUTION_UPDATE, label: 'Edit Test Executions', description: 'Edit test execution results' },
+      { permission: Permission.TEST_REPORT_VIEW, label: 'View Test Reports', description: 'View test reports and analytics' },
+      { permission: Permission.TEST_REPORT_EXPORT, label: 'Export Test Reports', description: 'Export test reports' },
+      { permission: Permission.TEST_MANAGE, label: 'Manage Tests', description: 'Full test management access' },
+    ]
+  },
+  {
+    category: PermissionCategory.KANBAN,
+    permissions: [
+      { permission: Permission.KANBAN_READ, label: 'View Kanban', description: 'View kanban boards' },
+      { permission: Permission.KANBAN_MANAGE, label: 'Manage Kanban', description: 'Manage kanban board settings' },
+    ]
+  },
+  {
+    category: PermissionCategory.BACKLOG,
+    permissions: [
+      { permission: Permission.BACKLOG_READ, label: 'View Backlog', description: 'View backlog items' },
+      { permission: Permission.BACKLOG_MANAGE, label: 'Manage Backlog', description: 'Manage backlog items and priorities' },
+    ]
+  },
+  {
+    category: PermissionCategory.DOCUMENTATION,
+    permissions: [
+      { permission: Permission.DOCUMENTATION_VIEW, label: 'View Documentation', description: 'View documentation pages' },
+      { permission: Permission.DOCUMENTATION_SEARCH, label: 'Search Documentation', description: 'Search documentation' },
+      { permission: Permission.DOCUMENTATION_CREATE, label: 'Create Documentation', description: 'Create new documentation pages' },
+      { permission: Permission.DOCUMENTATION_UPDATE, label: 'Edit Documentation', description: 'Edit documentation pages' },
+      { permission: Permission.DOCUMENTATION_DELETE, label: 'Delete Documentation', description: 'Delete documentation pages' },
+      { permission: Permission.DOCUMENTATION_MANAGE_PERMISSIONS, label: 'Manage Doc Permissions', description: 'Manage documentation access permissions' },
+    ]
   }
 ]
 
@@ -299,7 +348,7 @@ export function CreateRoleModal({ isOpen, onClose, onRoleCreated }: CreateRoleMo
     if (!group) return
 
     const allSelected = group.permissions.every(p => formData.permissions.includes(p.permission))
-    
+
     if (allSelected) {
       // Deselect all in this category
       setFormData(prev => ({
@@ -318,9 +367,9 @@ export function CreateRoleModal({ isOpen, onClose, onRoleCreated }: CreateRoleMo
   }
 
   // Check if form is valid - all required fields must be filled
-  const isFormValid = !!formData.name.trim() && 
-                      !!formData.description.trim() && 
-                      formData.permissions.length > 0
+  const isFormValid = !!formData.name.trim() &&
+    !!formData.description.trim() &&
+    formData.permissions.length > 0
 
   const hasBlockingError = !!error
 

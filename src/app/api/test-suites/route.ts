@@ -3,6 +3,8 @@ import { connectDB } from '@/lib/db-config'
 import { TestSuite, Project } from '@/models'
 // import { getServerSession } from 'next-auth'
 import { authenticateUser } from '@/lib/auth-utils'
+import { hasTestPermission } from '@/lib/permissions/test-permission-helper'
+import { Permission } from '@/lib/permissions/permission-definitions'
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,6 +16,9 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const projectId = searchParams.get('projectId')
     const parentSuiteId = searchParams.get('parentSuiteId')
+    const hasPagination = searchParams.has('page') || searchParams.has('limit')
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '50')
 
     let query: any = { organization: authResult.user.organization }
 
@@ -28,14 +33,35 @@ export async function GET(req: NextRequest) {
       query.parentSuite = { $exists: false }
     }
 
-    const testSuites = await TestSuite.find(query)
+    const findQuery = TestSuite.find(query)
       .populate('createdBy', 'firstName lastName email')
       .populate('parentSuite', 'name')
       .sort({ order: 1, createdAt: 1 })
 
+    let testSuites
+    let pagination: { page: number; limit: number; total: number; pages: number } | undefined
+
+    if (hasPagination) {
+      const safePage = Number.isFinite(page) && page > 0 ? page : 1
+      const safeLimit = Number.isFinite(limit) && limit > 0 ? limit : 50
+      const skip = (safePage - 1) * safeLimit
+
+      const total = await TestSuite.countDocuments(query)
+      testSuites = await findQuery.skip(skip).limit(safeLimit)
+      pagination = {
+        page: safePage,
+        limit: safeLimit,
+        total,
+        pages: Math.ceil(total / safeLimit)
+      }
+    } else {
+      testSuites = await findQuery
+    }
+
     return NextResponse.json({
       success: true,
-      data: testSuites
+      data: testSuites,
+      ...(pagination ? { pagination } : {})
     })
   } catch (error) {
     console.error('Error fetching test suites:', error)
@@ -76,6 +102,8 @@ export async function POST(req: NextRequest) {
     }
 
     const userIdStr = authResult.user.id?.toString?.() || String(authResult.user.id)
+    const roleStr = (authResult.user.role || '').toString()
+    const hasRolePerm = await hasTestPermission(userIdStr, roleStr, Permission.TEST_SUITE_CREATE)
     const createdByStr = project.createdBy?.toString?.()
     const teamHasUser = Array.isArray(project.teamMembers)
       ? project.teamMembers.some((m: any) => m?.toString?.() === userIdStr)
@@ -85,7 +113,7 @@ export async function POST(req: NextRequest) {
           (role: any) => role?.user?.toString?.() === userIdStr && ['project_manager', 'project_qa_lead', 'project_tester'].includes(role.role)
         )
       : false
-    const hasAccess = createdByStr === userIdStr || teamHasUser || roleHasUser
+    const hasAccess = hasRolePerm || createdByStr === userIdStr || teamHasUser || roleHasUser
 
     if (!hasAccess) {
       return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 })
@@ -159,6 +187,8 @@ export async function PUT(req: NextRequest) {
     }
 
     const userIdStr = authResult.user.id?.toString?.() || String(authResult.user.id)
+    const roleStr = (authResult.user.role || '').toString()
+    const hasRolePerm = await hasTestPermission(userIdStr, roleStr, Permission.TEST_SUITE_UPDATE)
     const createdByStr = project.createdBy?.toString?.()
     const teamHasUser = Array.isArray(project.teamMembers)
       ? project.teamMembers.some((m: any) => m?.toString?.() === userIdStr)
@@ -168,7 +198,7 @@ export async function PUT(req: NextRequest) {
           (role: any) => role?.user?.toString?.() === userIdStr && ['project_manager', 'project_qa_lead', 'project_tester'].includes(role.role)
         )
       : false
-    const hasAccess = createdByStr === userIdStr || teamHasUser || roleHasUser
+    const hasAccess = hasRolePerm || createdByStr === userIdStr || teamHasUser || roleHasUser
 
     if (!hasAccess) {
       return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 })

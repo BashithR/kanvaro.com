@@ -3,6 +3,9 @@ import { connectDB } from '@/lib/db-config'
 import { TestSuite, Project } from '@/models'
 // import { getServerSession } from 'next-auth'
 import { authenticateUser } from '@/lib/auth-utils'
+import { hasTestPermission } from '@/lib/permissions/test-permission-helper'
+import { Permission } from '@/lib/permissions/permission-definitions'
+import { PermissionService } from '@/lib/permissions/permission-service'
 
 export async function GET(
   req: NextRequest,
@@ -28,6 +31,8 @@ export async function GET(
     // Check if user has access to the project (compare as strings)
     const project = await Project.findById(testSuite.project)
     const userIdStr = authResult.user.id?.toString?.() || String(authResult.user.id)
+    const roleStr = (authResult.user.role || '').toString()
+    const hasRolePerm = await hasTestPermission(userIdStr, roleStr, Permission.TEST_SUITE_READ)
     const createdByStr = project?.createdBy?.toString?.()
     const teamHasUser = Array.isArray(project?.teamMembers)
       ? project!.teamMembers.some((m: any) => m?.toString?.() === userIdStr)
@@ -37,7 +42,7 @@ export async function GET(
           (role: any) => role?.user?.toString?.() === userIdStr && ['project_manager', 'project_qa_lead', 'project_tester'].includes(role.role)
         )
       : false
-    const hasAccess = !!project && (createdByStr === userIdStr || teamHasUser || roleHasUser)
+    const hasAccess = hasRolePerm || (!!project && (createdByStr === userIdStr || teamHasUser || roleHasUser))
 
     if (!hasAccess) {
       return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 })
@@ -80,6 +85,8 @@ export async function PUT(
     // Check if user has access to the project (compare as strings)
     const project = await Project.findById(testSuite.project)
     const userIdStr = authResult.user.id?.toString?.() || String(authResult.user.id)
+    const roleStr = (authResult.user.role || '').toString()
+    const hasRolePerm = await hasTestPermission(userIdStr, roleStr, Permission.TEST_SUITE_UPDATE)
     const createdByStr = project?.createdBy?.toString?.()
     const teamHasUser = Array.isArray(project?.teamMembers)
       ? project!.teamMembers.some((m: any) => m?.toString?.() === userIdStr)
@@ -89,7 +96,7 @@ export async function PUT(
           (role: any) => role?.user?.toString?.() === userIdStr && ['project_manager', 'project_qa_lead', 'project_tester'].includes(role.role)
         )
       : false
-    const hasAccess = !!project && (createdByStr === userIdStr || teamHasUser || roleHasUser)
+    const hasAccess = hasRolePerm || (!!project && (createdByStr === userIdStr || teamHasUser || roleHasUser))
 
     if (!hasAccess) {
       return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 })
@@ -150,16 +157,23 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: 'Test suite not found' }, { status: 404 })
     }
 
-    // Get user role (from global or auth result)
-    const userRole = (authResult as any)?.user?.role ?? (authResult as any)?.role
+    // Authorize deletion using the unified permission system with project context.
+    // This supports both project-role permissions and role/custom-role permissions
+    // while keeping organization boundaries enforced.
     const userIdStr = authResult.user.id?.toString?.() || String(authResult.user.id)
-    
-    // Check if user is an admin - admins can delete any test suite
-    const isAdmin = typeof userRole === 'string' && ['admin', 'super_admin', 'superadmin'].includes(userRole.toLowerCase())
+    const projectIdStr = testSuite.project?.toString?.() || String(testSuite.project)
 
-    if (!isAdmin) {
-      // Non-admin users cannot delete test suites based on current requirements
-      return NextResponse.json({ success: false, error: 'Access denied. Only admins can delete test suites' }, { status: 403 })
+    const canDelete = await PermissionService.hasPermission(
+      userIdStr,
+      Permission.TEST_SUITE_DELETE,
+      projectIdStr
+    )
+
+    if (!canDelete) {
+      return NextResponse.json(
+        { success: false, error: 'Access denied. You do not have permission to delete test suites' },
+        { status: 403 }
+      )
     }
 
     // Check if test suite has child suites
