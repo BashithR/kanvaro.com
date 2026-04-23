@@ -1,3 +1,10 @@
+# [1.33.0](https://github.com/EchonLabs/kanvaro.com/compare/v1.32.6...v1.33.0) (2026-04-23)
+
+
+### Features
+
+* Implement AuthContext for user authentication and session management ([59bd24c](https://github.com/EchonLabs/kanvaro.com/commit/59bd24c744a969a647021815260d8a36db1319e9))
+
 ## [1.32.6](https://github.com/EchonLabs/kanvaro.com/compare/v1.32.5...v1.32.6) (2026-04-22)
 
 
