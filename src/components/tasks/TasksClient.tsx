@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover
 import { Calendar as DateRangeCalendar } from '@/components/ui/calendar'
 import { cn, formatToTitleCase } from '@/lib/utils'
 import { useDateTime } from '@/components/providers/DateTimeProvider'
+import { useAuthContext } from '@/contexts/AuthContext'
 import {
     Plus,
     Search,
@@ -152,6 +153,8 @@ export default function TasksClient({
     initialPagination,
     initialFilters = {}
 }: TasksClientProps) {
+    const { user, isAuthenticated, isLoading: authLoading } = useAuthContext()
+
     const router = useRouter()
     const searchParams = useSearchParams()
     const { hasPermission, permissions } = usePermissions()
@@ -272,20 +275,6 @@ export default function TasksClient({
     )
 
     // Fetch current user for creator checks
-    useEffect(() => {
-        const fetchMe = async () => {
-            try {
-                const res = await fetch('/api/auth/me')
-                if (!res.ok) return
-                const data = await res.json().catch(() => null)
-                const uid = extractUserId(data)
-                if (uid) setCurrentUserId(uid)
-            } catch (e) {
-                // ignore
-            }
-        }
-        fetchMe()
-    }, [])
     useEffect(() => {
         const q = searchParams.get('search') || ''
         const s = searchParams.get('status') || 'all'

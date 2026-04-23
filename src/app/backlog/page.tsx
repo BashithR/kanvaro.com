@@ -20,6 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Calendar as DateRangeCalendar } from '@/components/ui/calendar'
 import { cn } from '@/lib/utils'
+import { useAuthContext } from '@/contexts/AuthContext'
 import {
   Eye,
   Edit,
@@ -128,6 +129,8 @@ function truncateText(value: string, maxLength = 20): string {
 }
 
 export default function BacklogPage() {
+  const { user, isAuthenticated, isLoading: authLoading } = useAuthContext()
+
   const router = useRouter()
   const searchParams = useSearchParams()
   const [backlogItems, setBacklogItems] = useState<BacklogItem[]>([])
@@ -139,8 +142,6 @@ export default function BacklogPage() {
   const { hasPermission } = usePermissions()
   const canManageSprints = hasPermission(Permission.SPRINT_MANAGE)
   const canCreateTask = hasPermission(Permission.TASK_CREATE)
-  const [user, setUser] = useState<any>(null)
-
   // Permission functions for backlog items
   const canEditTask = useCallback((task: BacklogItem) => {
     return hasPermission(Permission.TASK_EDIT_ALL) || task.createdBy._id === user?.id
@@ -170,7 +171,6 @@ export default function BacklogPage() {
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [selectedForDelete, setSelectedForDelete] = useState<{ id: string; type: BacklogItem['type']; title: string } | null>(null)
-  const [authError, setAuthError] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -273,6 +273,18 @@ export default function BacklogPage() {
     setCreatedByFilterQuery('')
   }
 
+
+  // Auth initialization - trigger data loading
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      setLoading(false)
+      fetchBacklogItems()
+    } else if (!authLoading && !isAuthenticated) {
+      router.push('/login')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, isAuthenticated])
+
   // Reset status filter if current value is not valid for the new context
   useEffect(() => {
     if (statusFilter !== 'all' && !availableStatusOptions.includes(statusFilter as any)) {
@@ -305,49 +317,6 @@ export default function BacklogPage() {
     fetchProjectDetails()
   }, [projectFilterValue])
 
-  const checkAuth = useCallback(async () => {
-    try {
-      const response = await fetch('/api/auth/me')
-
-      if (response.ok) {
-        const data = await response.json()
-        const userId = extractUserId(data)
-        if (userId) setUser({ id: userId.toString() })
-        setAuthError('')
-        await fetchBacklogItems()
-      } else if (response.status === 401) {
-        const refreshResponse = await fetch('/api/auth/refresh', {
-          method: 'POST'
-        })
-
-        if (refreshResponse.ok) {
-          const refreshData = await refreshResponse.json()
-          const userId = extractUserId(refreshData)
-          if (userId) setUser({ id: userId.toString() })
-          setAuthError('')
-          await fetchBacklogItems()
-        } else {
-          setAuthError('Session expired')
-          setTimeout(() => {
-            router.push('/login')
-          }, 2000)
-        }
-      } else {
-        router.push('/login')
-      }
-    } catch (error) {
-      console.error('Auth check failed:', error)
-      setAuthError('Authentication failed')
-      setTimeout(() => {
-        router.push('/login')
-      }, 2000)
-    }
-  }, [router])
-
-  useEffect(() => {
-    checkAuth()
-  }, [checkAuth])
-
   // Debounce search query to avoid excessive API calls
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -359,7 +328,7 @@ export default function BacklogPage() {
 
   // Fetch when pagination or filters change (after initial load)
   useEffect(() => {
-    if (!loading && !authError) {
+    if (!loading) {
       if (currentPage === 1) {
         fetchBacklogItems()
       } else {
@@ -370,7 +339,7 @@ export default function BacklogPage() {
 
   // Fetch when pagination changes
   useEffect(() => {
-    if (!loading && !authError) {
+    if (!loading) {
       fetchBacklogItems()
     }
   }, [currentPage, pageSize])
@@ -1512,19 +1481,6 @@ export default function BacklogPage() {
           <div className="text-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
             <p className="text-muted-foreground">Loading backlog...</p>
-          </div>
-        </div>
-      </MainLayout>
-    )
-  }
-
-  if (authError) {
-    return (
-      <MainLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <p className="text-destructive mb-4">{authError}</p>
-            <p className="text-muted-foreground">Redirecting to login...</p>
           </div>
         </div>
       </MainLayout>

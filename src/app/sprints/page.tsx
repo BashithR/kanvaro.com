@@ -20,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { usePermissions } from '@/lib/permissions/permission-context'
 import { useDateTime } from '@/components/providers/DateTimeProvider'
 import { Permission } from '@/lib/permissions/permission-definitions'
+import { useAuthContext } from '@/contexts/AuthContext'
 import {
   Plus,
   Search,
@@ -103,6 +104,8 @@ interface Sprint {
 }
 
 export default function SprintsPage() {
+  const { user, isAuthenticated, isLoading: authLoading } = useAuthContext()
+
   const router = useRouter()
   const routerRef = useRef(router)
   routerRef.current = router
@@ -112,8 +115,7 @@ export default function SprintsPage() {
   const [isFetching, setIsFetching] = useState(false)
   const isFirstFetch = useRef(false)
   const [error, setError] = useState('')
-  const [authError, setAuthError] = useState('')
-  const [searchQuery, setSearchQuery] = useState('')
+const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [projectFilter, setProjectFilter] = useState('all')
   const [projectFilterQuery, setProjectFilterQuery] = useState('')
@@ -228,45 +230,27 @@ export default function SprintsPage() {
     }
   }, [currentPage, pageSize, searchQuery, statusFilter, projectFilter])
 
-  const checkAuth = useCallback(async () => {
-    try {
-      const response = await fetch('/api/auth/me')
 
-      if (response.ok) {
-        setAuthError('')
-        await fetchSprints(currentPage)
-      } else if (response.status === 401) {
-        const refreshResponse = await fetch('/api/auth/refresh', {
-          method: 'POST'
-        })
-
-        if (refreshResponse.ok) {
-          setAuthError('')
-          await fetchSprints(currentPage)
-        } else {
-          setAuthError('Session expired')
-          setTimeout(() => {
-            routerRef.current.push('/login')
-          }, 2000)
-        }
-      } else {
-        routerRef.current.push('/login')
-      }
-    } catch (error) {
-      console.error('Auth check failed:', error)
-      setAuthError('Authentication failed')
-      setTimeout(() => {
-        routerRef.current.push('/login')
-      }, 2000)
-    }
-  }, [fetchSprints, currentPage])
-
+  // Auth initialization - trigger data loading
   useEffect(() => {
-    if (!initialLoadDone.current) {
-      initialLoadDone.current = true
-      checkAuth()
+    if (!authLoading && isAuthenticated) {
+      setLoading(false)
+      fetchSprints()
+    } else if (!authLoading && !isAuthenticated) {
+      router.push('/login')
     }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, isAuthenticated])
+
+  // Initial data load when authenticated
+  useEffect(() => {
+    if (!initialLoadDone.current && !authLoading && isAuthenticated) {
+      initialLoadDone.current = true
+      fetchSprints(currentPage)
+    } else if (!authLoading && !isAuthenticated) {
+      routerRef.current.push('/login')
+    }
+  }, [authLoading, isAuthenticated])
 
   useEffect(() => {
     const successParam = searchParams?.get('success')
@@ -811,19 +795,6 @@ export default function SprintsPage() {
     )
   }
 
-  if (authError) {
-    return (
-      <MainLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <p className="text-destructive mb-4">{authError}</p>
-            <p className="text-muted-foreground">Redirecting to login...</p>
-          </div>
-        </div>
-      </MainLayout>
-    )
-  }
-
   return (
     <MainLayout>
       <div className="space-y-8 sm:space-y-10 overflow-x-hidden">
@@ -845,7 +816,6 @@ export default function SprintsPage() {
             New Sprint
           </Button>
         </div>
-
 
 
         {/* Search and Filters */}
