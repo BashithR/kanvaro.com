@@ -11,6 +11,7 @@ import { formatToTitleCase } from '@/lib/utils'
 import { useDateTime } from '@/components/providers/DateTimeProvider'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useAuthContext } from '@/contexts/AuthContext'
 import {
   Plus,
   Search,
@@ -100,14 +101,15 @@ interface SprintSummary {
 
 
 export default function StoriesPage() {
+  const { user, isAuthenticated, isLoading: authLoading } = useAuthContext()
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
   const isFirstFetch = useRef(true);
-
-  const [authError, setAuthError] = useState('');
+  ;
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
@@ -158,65 +160,18 @@ export default function StoriesPage() {
   const { success: notifySuccess, error: notifyError } = useNotify();
   const canManageAllStories = hasPermission(Permission.STORY_MANAGE_ALL);
 
-  const fetchAndSetCurrentUser = useCallback(async () => {
-    try {
-      const response = await fetch('/api/auth/me')
-      if (response.ok) {
-        const data = await response.json().catch(() => ({}))
-        const userId = extractUserId(data)
-        if (userId) setCurrentUserId(userId)
-      }
-      return response
-    } catch (error) {
-      console.error('Auth check failed:', error)
-      throw error
-    }
-  }, [])
 
-  const checkAuth = useCallback(async () => {
-    try {
-      const response = await fetchAndSetCurrentUser()
-
-      if (response.ok) {
-        setAuthError('')
-        await fetchStories()
-      } else if (response.status === 401) {
-        const refreshResponse = await fetch('/api/auth/refresh', {
-          method: 'POST'
-        })
-
-        if (refreshResponse.ok) {
-          const meResponse = await fetchAndSetCurrentUser()
-          if (meResponse.ok) {
-            setAuthError('')
-            await fetchStories()
-          } else {
-            setAuthError('Session expired')
-            setTimeout(() => {
-              router.push('/login')
-            }, 2000)
-          }
-        } else {
-          setAuthError('Session expired')
-          setTimeout(() => {
-            router.push('/login')
-          }, 2000)
-        }
-      } else {
-        router.push('/login')
-      }
-    } catch (error) {
-      console.error('Auth check failed:', error)
-      setAuthError('Authentication failed')
-      setTimeout(() => {
-        router.push('/login')
-      }, 2000)
-    }
-  }, [router, fetchAndSetCurrentUser])
-
+  // Auth initialization - trigger data loading
   useEffect(() => {
-    checkAuth()
-  }, [checkAuth])
+    if (!authLoading && isAuthenticated) {
+      setLoading(false)
+      fetchStories()
+      fetchEpicOptions()
+    } else if (!authLoading && !isAuthenticated) {
+      router.push('/login')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, isAuthenticated])
 
   useEffect(() => {
     const successParam = searchParams?.get('success')
@@ -229,14 +184,13 @@ export default function StoriesPage() {
 
   // Fetch when pagination changes (after initial load)
   useEffect(() => {
-    if (!loading && !authError) {
+    if (!loading) {
       fetchStories(currentPage)
     }
   }, [currentPage, pageSize]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-fetch from page 1 whenever filters/search change
   useEffect(() => {
-    if (authError) return
     setCurrentPage(1)
     fetchStories(1)
   }, [searchQuery, statusFilter, priorityFilter, projectFilter, epicFilter, sprintFilter]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -634,19 +588,6 @@ export default function StoriesPage() {
           <div className="text-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
             <p className="text-muted-foreground">Loading stories...</p>
-          </div>
-        </div>
-      </MainLayout>
-    )
-  }
-
-  if (authError) {
-    return (
-      <MainLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <p className="text-destructive mb-4">{authError}</p>
-            <p className="text-muted-foreground">Redirecting to login...</p>
           </div>
         </div>
       </MainLayout>
