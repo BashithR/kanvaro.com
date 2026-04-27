@@ -1,3 +1,10 @@
+# [1.34.0](https://github.com/EchonLabs/kanvaro.com/compare/v1.33.0...v1.34.0) (2026-04-27)
+
+
+### Features
+
+* enhance filter search inputs with focus functionality across various components ([9a401b2](https://github.com/EchonLabs/kanvaro.com/commit/9a401b283bbf1bbc059291e75f6579c8a73deecc))
+
 # [1.33.0](https://github.com/EchonLabs/kanvaro.com/compare/v1.32.6...v1.33.0) (2026-04-23)
 
 
