@@ -1,3 +1,10 @@
+## [1.35.1](https://github.com/EchonLabs/kanvaro.com/compare/v1.35.0...v1.35.1) (2026-04-30)
+
+
+### Bug Fixes
+
+* mark image components as unoptimized for performance improvements ([d149303](https://github.com/EchonLabs/kanvaro.com/commit/d149303c439387053426935d8758dd021873bed4))
+
 # [1.35.0](https://github.com/EchonLabs/kanvaro.com/compare/v1.34.1...v1.35.0) (2026-04-28)
 
 
