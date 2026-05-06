@@ -1,3 +1,15 @@
+# [1.36.0](https://github.com/EchonLabs/kanvaro.com/compare/v1.35.2...v1.36.0) (2026-05-06)
+
+
+### Bug Fixes
+
+* add a header for change section in README ([68c436e](https://github.com/EchonLabs/kanvaro.com/commit/68c436e364969df07a806e7d689465102d49011e))
+
+
+### Features
+
+* **TimeLogs, TimeReports, Timer:** enhance task handling and improve UI interactions ([febe71c](https://github.com/EchonLabs/kanvaro.com/commit/febe71c6258a05aa1a909aac479704e31536b14d))
+
 ## [1.35.2](https://github.com/EchonLabs/kanvaro.com/compare/v1.35.1...v1.35.2) (2026-05-04)
 
 
