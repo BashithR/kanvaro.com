@@ -450,6 +450,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     // Team
     Permission.TEAM_READ,
     Permission.TEAM_INVITE,
+    Permission.TEAM_EDIT,
     // Permission.TEAM_DELETE,
     Permission.TEAM_REMOVE,
     Permission.TEAM_MANAGE_PERMISSIONS,
